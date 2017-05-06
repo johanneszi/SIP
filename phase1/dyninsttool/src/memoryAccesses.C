@@ -45,7 +45,7 @@ BPatch_addressSpace* startInstrumenting(accessType_t accessType,
             break;
         case open:
             // Open the binary file; do not open dependencies
-            handle = bpatch.openBinary(name, false);
+            handle = bpatch.openBinary(name, true);
             if (!handle) { fprintf(stderr, "openBinary failed\n"); }
             break;
     }
@@ -61,6 +61,7 @@ std::set<BPatch_basicBlock *> getBasicBlocksForFunction(BPatch_function *functio
 	return blocks;
 }
 
+/*
 void checker(unsigned char (*hashFunction)(std::vector<unsigned char>), unsigned char correctHash, 
 				unsigned long long startAddress, unsigned long long endAddress) {
 	
@@ -73,7 +74,86 @@ void checker(unsigned char (*hashFunction)(std::vector<unsigned char>), unsigned
 	if (newHash != correctHash) {
 		report();
 	}					
-} 
+} */
+
+
+std::vector<BPatch_snippet *> checkerSnippet(BPatch_addressSpace* app, BPatch_basicBlock *block, int hashFunction, 
+					unsigned char correctHash, unsigned long startAddress, unsigned long endAddress) {
+	
+	
+	std::vector<BPatch_snippet *> checkerSnippet;
+	
+	BPatch_image* appImage = app->getImage();
+	
+	BPatch_variableExpr* counter = 
+        app->malloc(*(appImage->findType("unsigned long")), "counter");
+    
+    BPatch_variableExpr* result = 
+        app->malloc(*(appImage->findType("unsigned long")), "result");	
+        
+    BPatch_arithExpr assignCounter(BPatch_assign,
+    									*counter, BPatch_constExpr(startAddress)
+    									);
+    									
+    BPatch_arithExpr assignResult(BPatch_assign,
+    									*result, BPatch_constExpr(0)
+    									);
+              								
+   	checkerSnippet.push_back(&assignCounter);
+   	checkerSnippet.push_back(&assignResult);
+   	
+  	std::vector<BPatch_snippet *> whileBody;
+	
+  	BPatch_arithExpr hash(BPatch_assign, *result, BPatch_arithExpr(BPatch_plus, BPatch_arithExpr(BPatch_deref, *counter), *result));
+  	BPatch_arithExpr count(BPatch_assign, *counter, BPatch_arithExpr(BPatch_plus, BPatch_constExpr(1), *counter));
+  	
+  	/*
+  	whileBody.push_back(&hash);
+  	whileBody.push_back(&count);
+  	*/
+  	
+  	checkerSnippet.push_back(&hash);
+  	checkerSnippet.push_back(&count);
+   
+   
+   /*
+   	BPatch_whileExpr whileHash(BPatch_boolExpr(BPatch_lt, *counter, BPatch_constExpr(endAddress)),
+    				BPatch_sequence(whileBody));
+    				
+    checkerSnippet.push_back(&whileHash);
+    
+    // Find the printf function
+    std::vector<BPatch_function*> printfFuncs;
+    appImage->findFunction("printf", printfFuncs);
+    if (printfFuncs.size() == 0) {
+        fprintf(stderr, "Could not find printf\n");
+    }
+
+	std::vector<BPatch_snippet*> printfArgs;
+    BPatch_snippet* fmt = 
+        new BPatch_constExpr("Hash corrupted!\n");
+    printfArgs.push_back(fmt);
+        
+        
+    // Construct a function call snippet
+    BPatch_funcCallExpr printfCall(*(printfFuncs[0]), printfArgs);
+    
+    BPatch_ifExpr checkHash(BPatch_boolExpr(BPatch_ne, *result, BPatch_constExpr(correctHash)), printfCall);
+ 	
+ 	checkerSnippet.push_back(&checkHash);
+ 	*/
+ 	
+ 	
+ 	if (!app->insertSnippet(BPatch_sequence(checkerSnippet), *(block->findEntryPoint()))) {
+      	  fprintf(stderr, "insertSnippet failed\n");
+      	}
+      	
+ 	return checkerSnippet;
+}
+
+
+
+
 
 void report() {
 	//Kill them all
@@ -82,7 +162,7 @@ void report() {
 
 unsigned char hashAdd(std::vector<unsigned char> insts) {
 	unsigned char hash = 0x2a;
-	std::vector<unsigned charg>::iterator instr_iter;
+	std::vector<unsigned char>::iterator instr_iter;
 	
 	for (instr_iter = insts.begin(); instr_iter != insts.end(); ++instr_iter) {
 		unsigned char current = *instr_iter;
@@ -130,7 +210,7 @@ bool insertChecker(BPatch_basicBlock *block) {
 void finishInstrumenting(BPatch_addressSpace* app, const char* newName) {
     BPatch_process* appProc = dynamic_cast<BPatch_process*>(app);
     BPatch_binaryEdit* appBin = dynamic_cast<BPatch_binaryEdit*>(app);
-
+    
     if (appProc) {
         if (!appProc->continueExecution()) {
             fprintf(stderr, "continueExecution failed\n");
@@ -150,7 +230,7 @@ int main() {
     const char* progName = "build/InterestingProgram";
     int progPID = 42;
     const char* progArgv[] = {"InterestingProgram", "-h", NULL};
-    accessType_t mode = create;
+    accessType_t mode = open;
 
     // Create/attach/open a binary
     BPatch_addressSpace* app = 
@@ -159,8 +239,8 @@ int main() {
         fprintf(stderr, "startInstrumenting failed\n");
         exit(1);
     }
-    
-    hashFunctions.push_back(*hashAdd, *hashXor);
+    //bpatch.setTypeChecking(false);
+    //hashFunctions.push_back(*hashAdd, *hashXor);
     
     BPatch_image *appImage = app->getImage();
 	std::vector<BPatch_function *> funcs; 
@@ -170,13 +250,20 @@ int main() {
     std::set<BPatch_basicBlock *>::iterator block_iter;
 	for (block_iter = blocks.begin(); block_iter != blocks.end(); ++block_iter) {
 		BPatch_basicBlock *block = *block_iter; 
-		cout<<hex<<computeHash(block, *hashAdd)<<endl;
+		unsigned char correctHash = computeHash(block, *hashAdd);
+		std::vector<BPatch_snippet *> checkerSnipp = checkerSnippet(app, block, 0, 
+					correctHash, block->getStartAddress(), block->getEndAddress());
+		
+		//  Insert the snippet
+    	//if (!app->insertSnippet(BPatch_sequence(checkerSnipp), *(block->findEntryPoint()))) {
+      	  //fprintf(stderr, "insertSnippet failed\n");
+      	//}
+      	
 	}
 
-   	
     
     // Finish instrumentation 
-    const char* progName2 = "InterestingProgram-rewritten";
+    const char* progName2 = "build/InterestingProgram-rewritten";
     finishInstrumenting(app, progName2);
     
     return 0;
