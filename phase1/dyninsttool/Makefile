@@ -40,6 +40,7 @@ DYNINST_LIBS = -L$(DYNINST_LIB) \
 			   -lcommon \
 			   -ldwarf -lelf \
 			   -ldyninstAPI \
+			   -linstructionAPI \
 			   -ldl
 
 $(BUILD)InterestingProgram: $(SOURCE)InterestingProgram.c
