@@ -1,0 +1,4 @@
+Please set the following ENV properly in order to build the project.
+
+export LD_LIBRARY_PATH="/usr/local/dyninst/lib"
+export DYNINSTAPI_RT_LIB="/usr/local/dyninst/lib/libdyninstAPI_RT.so"
