@@ -78,7 +78,7 @@ void checker(unsigned char (*hashFunction)(std::vector<unsigned char>), unsigned
 
 
 std::vector<BPatch_snippet *> checkerSnippet(BPatch_addressSpace* app, BPatch_basicBlock *block, int hashFunction, 
-					unsigned char correctHash, unsigned long startAddress, unsigned long endAddress) {
+					unsigned long correctHash, unsigned long startAddress, unsigned long endAddress) {
 	
 	
 	std::vector<BPatch_snippet *> checkerSnippet;
@@ -91,36 +91,44 @@ std::vector<BPatch_snippet *> checkerSnippet(BPatch_addressSpace* app, BPatch_ba
     BPatch_variableExpr* result = 
         app->malloc(*(appImage->findType("unsigned long")), "result");	
         
-    BPatch_arithExpr assignCounter(BPatch_assign,
-    									*counter, BPatch_constExpr(startAddress)
-    									);
-    									
-    BPatch_arithExpr assignResult(BPatch_assign,
-    									*result, BPatch_constExpr(0)
-    									);
+    // couter = startAddress 
+    BPatch_arithExpr *assignCounter = new BPatch_arithExpr(BPatch_assign,
+    									*counter, BPatch_constExpr(startAddress));
+    
+    // result = 0									
+    BPatch_arithExpr *assignResult = new BPatch_arithExpr (BPatch_assign,
+    									*result, BPatch_constExpr(0));
               								
-   	checkerSnippet.push_back(&assignCounter);
-   	checkerSnippet.push_back(&assignResult);
+   	checkerSnippet.push_back(assignCounter);
+   	checkerSnippet.push_back(assignResult);
    	
+  	
   	std::vector<BPatch_snippet *> whileBody;
 	
-  	BPatch_arithExpr hash(BPatch_assign, *result, BPatch_arithExpr(BPatch_plus, BPatch_arithExpr(BPatch_deref, *counter), *result));
-  	BPatch_arithExpr count(BPatch_assign, *counter, BPatch_arithExpr(BPatch_plus, BPatch_constExpr(1), *counter));
+	// result + *counter
+	BPatch_arithExpr *addByte = new BPatch_arithExpr(BPatch_plus, BPatch_arithExpr(BPatch_deref, *counter), *result);
+	
+	// result = result + * counter
+  	BPatch_arithExpr *hash = new BPatch_arithExpr(BPatch_assign, *result, *addByte);
   	
-  	/*
-  	whileBody.push_back(&hash);
-  	whileBody.push_back(&count);
-  	*/
+  	// count++
+  	BPatch_arithExpr *countPlus = new BPatch_arithExpr(BPatch_plus, BPatch_constExpr(1), *counter);
   	
-  	checkerSnippet.push_back(&hash);
-  	checkerSnippet.push_back(&count);
+  	// count = count + 1
+  	BPatch_arithExpr *count = new BPatch_arithExpr(BPatch_assign, *counter, *countPlus);
+  	
+  	
+  	whileBody.push_back(hash);
+  	whileBody.push_back(count);
    
-   
-   /*
-   	BPatch_whileExpr whileHash(BPatch_boolExpr(BPatch_lt, *counter, BPatch_constExpr(endAddress)),
-    				BPatch_sequence(whileBody));
+   	// counter < endAddress
+   	BPatch_boolExpr *counterLEndAddress = new BPatch_boolExpr(BPatch_lt, *counter, BPatch_constExpr(endAddress));
+   	
+   	// while(counter < endAddress) { whileBody }
+   	BPatch_whileExpr *whileHash = new BPatch_whileExpr(*counterLEndAddress, BPatch_sequence(whileBody));
     				
-    checkerSnippet.push_back(&whileHash);
+    checkerSnippet.push_back(whileHash);
+    
     
     // Find the printf function
     std::vector<BPatch_function*> printfFuncs;
@@ -141,12 +149,11 @@ std::vector<BPatch_snippet *> checkerSnippet(BPatch_addressSpace* app, BPatch_ba
     BPatch_ifExpr checkHash(BPatch_boolExpr(BPatch_ne, *result, BPatch_constExpr(correctHash)), printfCall);
  	
  	checkerSnippet.push_back(&checkHash);
- 	*/
  	
  	
  	if (!app->insertSnippet(BPatch_sequence(checkerSnippet), *(block->findEntryPoint()))) {
       	  fprintf(stderr, "insertSnippet failed\n");
-      	}
+    }
       	
  	return checkerSnippet;
 }
@@ -201,17 +208,12 @@ unsigned char computeHash(BPatch_basicBlock *block, unsigned char (*hashFunction
 	return hashFunction(instValues);
 }
 
-bool insertChecker(BPatch_basicBlock *block) {
-	int index = rand() % hashFunctions.size();
-	
-	
-}
-
 void finishInstrumenting(BPatch_addressSpace* app, const char* newName) {
     BPatch_process* appProc = dynamic_cast<BPatch_process*>(app);
     BPatch_binaryEdit* appBin = dynamic_cast<BPatch_binaryEdit*>(app);
-    
+    cout << "in Finish start" << endl;
     if (appProc) {
+    	cout<<"appProc"<<endl;
         if (!appProc->continueExecution()) {
             fprintf(stderr, "continueExecution failed\n");
         }
@@ -219,10 +221,12 @@ void finishInstrumenting(BPatch_addressSpace* app, const char* newName) {
             bpatch.waitForStatusChange();
         }
     } else if (appBin) {
+    	cout<<"appBin"<<endl;
         if (!appBin->writeFile(newName)) {
-            fprintf(stderr, "writeFile failed\n");
+            fprintf(stderr,"writeFile failed\n");
         }
     }
+    cout<<"inFinish end"<<endl;
 }
 
 int main() {
@@ -239,7 +243,7 @@ int main() {
         fprintf(stderr, "startInstrumenting failed\n");
         exit(1);
     }
-    //bpatch.setTypeChecking(false);
+    bpatch.setTypeChecking(false);
     //hashFunctions.push_back(*hashAdd, *hashXor);
     
     BPatch_image *appImage = app->getImage();
@@ -261,11 +265,8 @@ int main() {
       	
 	}
 
-    
     // Finish instrumentation 
     const char* progName2 = "build/InterestingProgram-rewritten";
     finishInstrumenting(app, progName2);
-    
-    return 0;
 }
 
