@@ -13,8 +13,8 @@ SOURCE = src/
 BUILD = build/
 
 # These should point to where libelf and libdwarf are installed
-LIBELF = /home/sip/dyninst/libelf/lib
-LIBDWARF = /home/sip/dyninst/libdwarf/lib
+LIBELF = /home/$(USER)/dyninst/libelf/lib
+LIBDWARF = /home/$(USER)/dyninst/libdwarf/lib
 
 DYNINST_INCLUDE = $(DYNINST_ROOT)/include
 DYNINST_LIB = $(DYNINST_ROOT)/lib
