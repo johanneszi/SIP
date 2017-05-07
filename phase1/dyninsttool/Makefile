@@ -27,7 +27,7 @@ CXXFLAGS = -g -Wall -std=c++11
 
 MKDIR = mkdir -p $@
 
-PROG = memoryAccesses InterestingProgram
+PROG = instroProtect InterestingProgram
 TARGETS = $(addprefix $(BUILD), $(PROG))
 
 .PHONY: directories
@@ -47,7 +47,7 @@ $(BUILD)InterestingProgram: $(SOURCE)InterestingProgram.c
 	$(CC) $(CCFLAGS) -o $@ $^
 
 
-$(BUILD)memoryAccesses: $(BUILD)memoryAccesses.o
+$(BUILD)instroProtect: $(BUILD)instroProtect.o
 	$(CXX) $(CXXFLAGS) -o $@ $^ -I$(DYNINST_INCLUDE) $(DYNINST_LIBS) 
 
 $(BUILD):
@@ -59,5 +59,5 @@ $(BUILD)%.o: $(SOURCE)%.C
 .PHONY: clean
 
 clean: 
-	rm -rf $(BUILD)
+	rm -rf $(BUILD)*
 
