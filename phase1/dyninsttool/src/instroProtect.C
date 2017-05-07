@@ -87,9 +87,13 @@ std::vector<BPatch_snippet *> checkerSnippet(BPatch_addressSpace* app, BPatch_ba
 	
 	BPatch_variableExpr* counter = 
         app->malloc(*(appImage->findType("unsigned long")), "counter");
+        
+    BPatch_variableExpr* currentByte = 
+        app->malloc(*(appImage->findType("unsigned char")), "currentByte");
     
     BPatch_variableExpr* result = 
-        app->malloc(*(appImage->findType("unsigned long")), "result");	
+        app->malloc(*(appImage->findType("unsigned long")), "result");
+        	
         
     // couter = startAddress 
     BPatch_arithExpr *assignCounter = new BPatch_arithExpr(BPatch_assign,
@@ -98,17 +102,25 @@ std::vector<BPatch_snippet *> checkerSnippet(BPatch_addressSpace* app, BPatch_ba
     // result = 0									
     BPatch_arithExpr *assignResult = new BPatch_arithExpr (BPatch_assign,
     									*result, BPatch_constExpr(0));
-              								
+    									
+    // currentByte = 0									
+    //BPatch_arithExpr *assignCurrentByte = new BPatch_arithExpr (BPatch_assign,
+    //									*currentByte, BPatch_constExpr(0));
+      
+    int zero = 42;
+    currentByte->writeValue(&zero);
    	checkerSnippet.push_back(assignCounter);
    	checkerSnippet.push_back(assignResult);
-   	
   	
   	std::vector<BPatch_snippet *> whileBody;
 	
-	// result + *counter
-	BPatch_arithExpr *addByte = new BPatch_arithExpr(BPatch_plus, BPatch_arithExpr(BPatch_deref, *counter), *result);
+	// currentByte = (unsigned char) *counter
+	BPatch_arithExpr *getCurrentByte = new BPatch_arithExpr(BPatch_assign, *currentByte, BPatch_arithExpr(BPatch_deref, *counter));
 	
-	// result = result + * counter
+	// result + currentByte
+	BPatch_arithExpr *addByte = new BPatch_arithExpr(BPatch_plus, *result, *currentByte);
+	
+	// result = result + currentByte
   	BPatch_arithExpr *hash = new BPatch_arithExpr(BPatch_assign, *result, *addByte);
   	
   	// count++
@@ -117,7 +129,7 @@ std::vector<BPatch_snippet *> checkerSnippet(BPatch_addressSpace* app, BPatch_ba
   	// count = count + 1
   	BPatch_arithExpr *count = new BPatch_arithExpr(BPatch_assign, *counter, *countPlus);
   	
-  	
+  	whileBody.push_back(getCurrentByte);
   	whileBody.push_back(hash);
   	whileBody.push_back(count);
    
@@ -146,9 +158,11 @@ std::vector<BPatch_snippet *> checkerSnippet(BPatch_addressSpace* app, BPatch_ba
     // Construct a function call snippet
     BPatch_funcCallExpr printfCall(*(printfFuncs[0]), printfArgs);
     
-    BPatch_ifExpr checkHash(BPatch_boolExpr(BPatch_ne, *result, BPatch_constExpr(correctHash)), printfCall);
+    BPatch_ifExpr *checkHash = new BPatch_ifExpr(
+					BPatch_boolExpr(BPatch_ne, *result, BPatch_constExpr(correctHash)), 
+					printfCall);
  	
- 	checkerSnippet.push_back(&checkHash);
+ 	checkerSnippet.push_back(checkHash);
  	
  	
  	if (!app->insertSnippet(BPatch_sequence(checkerSnippet), *(block->findEntryPoint()))) {
@@ -158,21 +172,17 @@ std::vector<BPatch_snippet *> checkerSnippet(BPatch_addressSpace* app, BPatch_ba
  	return checkerSnippet;
 }
 
-
-
-
-
 void report() {
 	//Kill them all
 	puts("Hash was incoreect!");
 }
 
-unsigned char hashAdd(std::vector<unsigned char> insts) {
-	unsigned char hash = 0x2a;
-	std::vector<unsigned char>::iterator instr_iter;
+unsigned long hashAdd(std::vector<unsigned long> insts) {
+	unsigned long hash = 0;
+	std::vector<unsigned long>::iterator instr_iter;
 	
 	for (instr_iter = insts.begin(); instr_iter != insts.end(); ++instr_iter) {
-		unsigned char current = *instr_iter;
+		unsigned long current = *instr_iter;
 		hash += current;
 	}
 	
@@ -191,15 +201,16 @@ unsigned char hashXor(std::vector<unsigned char> insts) {
 	return hash;
 }
 
-unsigned char computeHash(BPatch_basicBlock *block, unsigned char (*hashFunction)(std::vector<unsigned char>)) {
+unsigned long computeHash(BPatch_basicBlock *block, unsigned long (*hashFunction)(std::vector<unsigned long>)) {
 	std::vector<Dyninst::InstructionAPI::Instruction::Ptr> insns; 
 	block->getInstructions(insns);
 
 	std::vector<Dyninst::InstructionAPI::Instruction::Ptr>::iterator instr_iter;
-	std::vector<unsigned char> instValues;
+	std::vector<unsigned long> instValues;
 	
 	for (instr_iter = insns.begin(); instr_iter != insns.end(); ++instr_iter) {
 		Dyninst::InstructionAPI::Instruction::Ptr inst = *instr_iter; 
+		if (inst)
 		for (unsigned int i = 0; i < inst->size(); i++) {			
 			instValues.push_back(inst->rawByte(i));
 		}
@@ -211,9 +222,8 @@ unsigned char computeHash(BPatch_basicBlock *block, unsigned char (*hashFunction
 void finishInstrumenting(BPatch_addressSpace* app, const char* newName) {
     BPatch_process* appProc = dynamic_cast<BPatch_process*>(app);
     BPatch_binaryEdit* appBin = dynamic_cast<BPatch_binaryEdit*>(app);
-    cout << "in Finish start" << endl;
+   
     if (appProc) {
-    	cout<<"appProc"<<endl;
         if (!appProc->continueExecution()) {
             fprintf(stderr, "continueExecution failed\n");
         }
@@ -221,12 +231,10 @@ void finishInstrumenting(BPatch_addressSpace* app, const char* newName) {
             bpatch.waitForStatusChange();
         }
     } else if (appBin) {
-    	cout<<"appBin"<<endl;
         if (!appBin->writeFile(newName)) {
             fprintf(stderr,"writeFile failed\n");
         }
     }
-    cout<<"inFinish end"<<endl;
 }
 
 int main() {
@@ -243,7 +251,7 @@ int main() {
         fprintf(stderr, "startInstrumenting failed\n");
         exit(1);
     }
-    bpatch.setTypeChecking(false);
+    //bpatch.setTypeChecking(false);
     //hashFunctions.push_back(*hashAdd, *hashXor);
     
     BPatch_image *appImage = app->getImage();
@@ -254,15 +262,16 @@ int main() {
     std::set<BPatch_basicBlock *>::iterator block_iter;
 	for (block_iter = blocks.begin(); block_iter != blocks.end(); ++block_iter) {
 		BPatch_basicBlock *block = *block_iter; 
-		unsigned char correctHash = computeHash(block, *hashAdd);
+		unsigned long correctHash = 0xd7;//computeHash(block, *hashAdd);
+		cout<<hex<<correctHash<<endl;
 		std::vector<BPatch_snippet *> checkerSnipp = checkerSnippet(app, block, 0, 
-					correctHash, block->getStartAddress(), block->getEndAddress());
+					correctHash, 0x8100147, 0x8100159);
 		
 		//  Insert the snippet
     	//if (!app->insertSnippet(BPatch_sequence(checkerSnipp), *(block->findEntryPoint()))) {
       	  //fprintf(stderr, "insertSnippet failed\n");
       	//}
-      	
+      	break;
 	}
 
     // Finish instrumentation 
