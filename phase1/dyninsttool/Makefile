@@ -1,4 +1,4 @@
-DYNINST_ROOT = /usr/local/dyninst
+DYNINST_ROOT = /usr/local
 PLATFORM = x86_64-unknown-linux2.4
 
 ifeq ($(DYNINST_ROOT),)
@@ -13,14 +13,14 @@ SOURCE = src/
 BUILD = build/
 
 # These should point to where libelf and libdwarf are installed
-LIBELF = /home/$(USER)/dyninst/libelf/lib
-LIBDWARF = /home/$(USER)/dyninst/libdwarf/lib
+LIBELF = /home/dyninst/build/libelf/lib
+LIBDWARF = /home/dyninst/build/libdwarf/lib
 
 DYNINST_INCLUDE = $(DYNINST_ROOT)/include
 DYNINST_LIB = $(DYNINST_ROOT)/lib
 
 CC = gcc
-CCFLAGS = -g -Wall
+CCFLAGS = -g -Wall -m32
 
 CXX = g++
 CXXFLAGS = -g -Wall -std=c++11
