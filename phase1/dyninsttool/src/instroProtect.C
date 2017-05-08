@@ -78,7 +78,7 @@ void checker(unsigned char (*hashFunction)(std::vector<unsigned char>), unsigned
 
 
 std::vector<BPatch_snippet *> checkerSnippet(BPatch_addressSpace* app, BPatch_basicBlock *block, int hashFunction, 
-					unsigned long correctHash, unsigned long startAddress, unsigned long endAddress) {
+					char correctHash, unsigned long startAddress, unsigned long size) {
 	
 	
 	std::vector<BPatch_snippet *> checkerSnippet;
@@ -87,13 +87,12 @@ std::vector<BPatch_snippet *> checkerSnippet(BPatch_addressSpace* app, BPatch_ba
 	
 	BPatch_variableExpr* counter = 
         app->malloc(*(appImage->findType("unsigned long")), "counter");
-        
-    BPatch_variableExpr* currentByte = 
-        app->malloc(*(appImage->findType("unsigned char")), "currentByte");
     
     BPatch_variableExpr* result = 
-        app->malloc(*(appImage->findType("unsigned long")), "result");
+        app->malloc(*(appImage->findType("char")), "result");
         	
+    BPatch_variableExpr* correctHashConst = 
+        app->malloc(*(appImage->findType("char")), "correctHashConst");
         
     // couter = startAddress 
     BPatch_arithExpr *assignCounter = new BPatch_arithExpr(BPatch_assign,
@@ -101,24 +100,20 @@ std::vector<BPatch_snippet *> checkerSnippet(BPatch_addressSpace* app, BPatch_ba
     
     // result = 0									
     BPatch_arithExpr *assignResult = new BPatch_arithExpr (BPatch_assign,
-    									*result, BPatch_constExpr(0));
+    									*result, BPatch_constExpr(1));
+    						
+    // correctHashConst = 0									
+    BPatch_arithExpr *assignCorrectHashConst = new BPatch_arithExpr (BPatch_assign,
+    									*correctHashConst, BPatch_constExpr(correctHash));
     									
-    // currentByte = 0									
-    //BPatch_arithExpr *assignCurrentByte = new BPatch_arithExpr (BPatch_assign,
-    //									*currentByte, BPatch_constExpr(0));
-      
-    int zero = 42;
-    currentByte->writeValue(&zero);
    	checkerSnippet.push_back(assignCounter);
    	checkerSnippet.push_back(assignResult);
+   	checkerSnippet.push_back(assignCorrectHashConst);
   	
   	std::vector<BPatch_snippet *> whileBody;
 	
-	// currentByte = (unsigned char) *counter
-	BPatch_arithExpr *getCurrentByte = new BPatch_arithExpr(BPatch_assign, *currentByte, BPatch_arithExpr(BPatch_deref, *counter));
-	
 	// result + currentByte
-	BPatch_arithExpr *addByte = new BPatch_arithExpr(BPatch_plus, *result, *currentByte);
+	BPatch_arithExpr *addByte = new BPatch_arithExpr(BPatch_times, *result, BPatch_arithExpr(BPatch_deref, *counter));
 	
 	// result = result + currentByte
   	BPatch_arithExpr *hash = new BPatch_arithExpr(BPatch_assign, *result, *addByte);
@@ -129,12 +124,11 @@ std::vector<BPatch_snippet *> checkerSnippet(BPatch_addressSpace* app, BPatch_ba
   	// count = count + 1
   	BPatch_arithExpr *count = new BPatch_arithExpr(BPatch_assign, *counter, *countPlus);
   	
-  	whileBody.push_back(getCurrentByte);
   	whileBody.push_back(hash);
   	whileBody.push_back(count);
    
    	// counter < endAddress
-   	BPatch_boolExpr *counterLEndAddress = new BPatch_boolExpr(BPatch_lt, *counter, BPatch_constExpr(endAddress));
+   	BPatch_boolExpr *counterLEndAddress = new BPatch_boolExpr(BPatch_lt, *counter, BPatch_constExpr(startAddress + size));
    	
    	// while(counter < endAddress) { whileBody }
    	BPatch_whileExpr *whileHash = new BPatch_whileExpr(*counterLEndAddress, BPatch_sequence(whileBody));
@@ -156,11 +150,11 @@ std::vector<BPatch_snippet *> checkerSnippet(BPatch_addressSpace* app, BPatch_ba
         
         
     // Construct a function call snippet
-    BPatch_funcCallExpr printfCall(*(printfFuncs[0]), printfArgs);
+    BPatch_funcCallExpr *printfCall = new BPatch_funcCallExpr(*(printfFuncs[0]), printfArgs);
     
     BPatch_ifExpr *checkHash = new BPatch_ifExpr(
-					BPatch_boolExpr(BPatch_ne, *result, BPatch_constExpr(correctHash)), 
-					printfCall);
+					BPatch_boolExpr(BPatch_ne, *result, *correctHashConst), 
+					*printfCall);
  	
  	checkerSnippet.push_back(checkHash);
  	
@@ -262,10 +256,10 @@ int main() {
     std::set<BPatch_basicBlock *>::iterator block_iter;
 	for (block_iter = blocks.begin(); block_iter != blocks.end(); ++block_iter) {
 		BPatch_basicBlock *block = *block_iter; 
-		unsigned long correctHash = 0xd7;//computeHash(block, *hashAdd);
-		cout<<hex<<correctHash<<endl;
+		char correctHash = 0x26;//computeHash(block, *hashAdd);
+		cout<<hex<<block->getStartAddress()<<" "<< block->getEndAddress()<<" "<< block->size()<<endl;
 		std::vector<BPatch_snippet *> checkerSnipp = checkerSnippet(app, block, 0, 
-					correctHash, 0x8100147, 0x8100159);
+					correctHash, 0x81000a1, block->size());
 		
 		//  Insert the snippet
     	//if (!app->insertSnippet(BPatch_sequence(checkerSnipp), *(block->findEntryPoint()))) {
