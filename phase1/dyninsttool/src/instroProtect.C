@@ -222,44 +222,38 @@ Graph createCheckerNetwork(BPatch_addressSpace* app, int connectivity, std::vect
 	for (auto name : functions){
 		std::vector<BPatch_function *> funcs;
 		appImage->findFunction(name, funcs);
-		std::vector<BPatch_function *>::iterator func_iter;
-		for (func_iter = funcs.begin(); func_iter != funcs.end(); ++func_iter){
-			std::set<BPatch_basicBlock *> blocks = getBasicBlocksForFunction(*func_iter);
-    			std::set<BPatch_basicBlock *>::iterator block_iter;
-			for (block_iter = blocks.begin(); block_iter != blocks.end(); ++block_iter) {
-				BPatch_basicBlock *block = *block_iter; 
+		for  (auto singleFunc : funcs){
+			std::set<BPatch_basicBlock *> blocks = getBasicBlocksForFunction(singleFunc);
+			for (auto singleBlock : blocks){
+				BPatch_basicBlock *block = singleBlock; 
 				vertex_t u = boost::add_vertex(g);
 				g[u].block = block;
 				vertices.push_back(u);
 			}
 		}
 	}
-	connectivity = min((int)vertices.size(), connectivity);
-	std::vector<vertex_t> vertices_destination = vertices;
-	for (auto block_from : vertices){
+	connectivity = std::min((int)(vertices.size()-1), connectivity);
+	std::vector<vertex_t> verticesDest = vertices;
+	for (auto blockFrom : vertices){
 		int out = 0;
 		while(out < connectivity){
-			vertex_t block_to;
+			vertex_t blockTo;
 			int rand_pos;
 			while(true){
-				rand_pos = rand() % vertices_destination.size();
-				std::cout<<rand_pos<<endl;
-				block_to = vertices_destination[rand_pos];
-				if (block_from != block_to){
+				rand_pos = rand() % verticesDest.size();
+				blockTo = verticesDest[rand_pos];
+				if (blockFrom != blockTo){
 					break;
 				}
 			}
-			if(boost::add_edge(block_to, block_from, g).second){
-				Graph::in_edge_iterator in_i, in_end;
-      			boost::tie(in_i, in_end) = in_edges(block_to,g);
-				//if ((int)std::distance(in_i, in_end) == connectivity){
-				//	vertices_destination.erase(vertices_destination.begin() + rand_pos);
-				//}
+			if(boost::add_edge(blockTo, blockFrom, g).second){
+				Graph::in_edge_iterator inI, inEnd;
+      			boost::tie(inI, inEnd) = in_edges(blockTo,g);
 				out += 1;
 			}
 		}
 	}
-	write_graphviz_dp(std::cout, g);
+	write_graphviz(std::cout, g);
 	return g;
 }
 
@@ -282,7 +276,7 @@ int main() {
     std::vector<char*> functions;
     functions.push_back("print");
     functions.push_back("InterestingProcedure");
-    Graph g = createCheckerNetwork(app, 2, functions);
+    Graph g = createCheckerNetwork(app, 7, functions);
     
     BPatch_image *appImage = app->getImage();
 	std::vector<BPatch_function *> funcs; 
