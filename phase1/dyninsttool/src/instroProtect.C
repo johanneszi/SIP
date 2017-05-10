@@ -10,15 +10,15 @@
 #include "BPatch_flowGraph.h"
 #include "Instruction.h"
 
-#define BYTE 8
-
 using namespace std;
 using namespace Dyninst;
 
 // Create an instance of class BPatch
 BPatch bpatch;
-std::vector<unsigned char (*)(std::vector<unsigned char>)> hashFunctions;
 
+// Uncomment this if you want to stop type checking
+// on BPatch snippets
+//bpatch.setTypeChecking(false);
 
 // Different ways to perform instrumentation
 typedef enum {
@@ -53,6 +53,15 @@ BPatch_addressSpace* startInstrumenting(accessType_t accessType,
     return handle;
 }
 
+template<typename T>
+void releaseBPatchVectorContents(BPatch_Vector<T *> vector) {
+	for (auto *element : vector)
+      		delete element;
+    
+    vector.clear();  	
+    vector.shrink_to_fit();
+} 
+
 std::set<BPatch_basicBlock *> getBasicBlocksForFunction(BPatch_function *function) {
 	BPatch_flowGraph *fg = function->getCFG();
 	std::set<BPatch_basicBlock *> blocks; 
@@ -61,29 +70,35 @@ std::set<BPatch_basicBlock *> getBasicBlocksForFunction(BPatch_function *functio
 	return blocks;
 }
 
-/*
-void checker(unsigned char (*hashFunction)(std::vector<unsigned char>), unsigned char correctHash, 
-				unsigned long long startAddress, unsigned long long endAddress) {
-	
-	std::vector<unsigned char> instValues;
-	for (unsigned long long i = startAddress; i < endAddress; i++) {
-		instValues.push_back(*i);
-	}
-	
-	unsigned char newHash = hashFunction(instValues);
-	if (newHash != correctHash) {
-		report();
-	}					
-} */
-
-
-std::vector<BPatch_snippet *> checkerSnippet(BPatch_addressSpace* app, BPatch_basicBlock *block, int hashFunction, 
-					char correctHash, unsigned long startAddress, unsigned long size) {
-	
-	
-	std::vector<BPatch_snippet *> checkerSnippet;
-	
+BPatch_funcCallExpr* createReportFunctionSnippet(BPatch_addressSpace* app) {
 	BPatch_image* appImage = app->getImage();
+	
+	// Find the printf function
+    std::vector<BPatch_function*> printfFuncs;
+    appImage->findFunction("print", printfFuncs);
+    
+    if (printfFuncs.size() == 0) {
+        fprintf(stderr, "Could not find printf\n");
+    }
+
+	std::vector<BPatch_snippet*> printfArgs;
+    BPatch_snippet* fmt = new BPatch_constExpr("Hash corrupted!\n");
+    printfArgs.push_back(fmt);
+        
+    // Construct a function call snippet
+    BPatch_funcCallExpr *printfCall = new BPatch_funcCallExpr(*(printfFuncs[0]), printfArgs);
+    
+    return printfCall;
+}
+
+BPatch_Vector<BPatch_snippet *> createCheckerSnippet(BPatch_addressSpace* app, char correctHash, 
+													unsigned long startAddress, unsigned long size,
+													BPatch_binOp hashFunction = BPatch_plus,
+													char hashStartValue = 0) {
+	BPatch_image* appImage = app->getImage();
+	
+	// Holds all created snippets
+	BPatch_Vector<BPatch_snippet *> checkerSnippet;
 	
 	BPatch_variableExpr* counter = 
         app->malloc(*(appImage->findType("unsigned long")), "counter");
@@ -100,20 +115,21 @@ std::vector<BPatch_snippet *> checkerSnippet(BPatch_addressSpace* app, BPatch_ba
     
     // result = 0									
     BPatch_arithExpr *assignResult = new BPatch_arithExpr (BPatch_assign,
-    									*result, BPatch_constExpr(1));
+    									*result, BPatch_constExpr(hashStartValue));
     						
     // correctHashConst = 0									
     BPatch_arithExpr *assignCorrectHashConst = new BPatch_arithExpr (BPatch_assign,
-    									*correctHashConst, BPatch_constExpr(correctHash));
+   										*correctHashConst, BPatch_constExpr(correctHash));
+    								
     									
    	checkerSnippet.push_back(assignCounter);
    	checkerSnippet.push_back(assignResult);
    	checkerSnippet.push_back(assignCorrectHashConst);
   	
-  	std::vector<BPatch_snippet *> whileBody;
+  	BPatch_Vector<BPatch_snippet *> whileBody;
 	
 	// result + currentByte
-	BPatch_arithExpr *addByte = new BPatch_arithExpr(BPatch_times, *result, BPatch_arithExpr(BPatch_deref, *counter));
+	BPatch_arithExpr *addByte = new BPatch_arithExpr(hashFunction, *result, BPatch_arithExpr(BPatch_deref, *counter));
 	
 	// result = result + currentByte
   	BPatch_arithExpr *hash = new BPatch_arithExpr(BPatch_assign, *result, *addByte);
@@ -124,6 +140,7 @@ std::vector<BPatch_snippet *> checkerSnippet(BPatch_addressSpace* app, BPatch_ba
   	// count = count + 1
   	BPatch_arithExpr *count = new BPatch_arithExpr(BPatch_assign, *counter, *countPlus);
   	
+  	// Add the created instructions to whileBody
   	whileBody.push_back(hash);
   	whileBody.push_back(count);
    
@@ -135,64 +152,17 @@ std::vector<BPatch_snippet *> checkerSnippet(BPatch_addressSpace* app, BPatch_ba
     				
     checkerSnippet.push_back(whileHash);
     
+    // create report function snippet
+    BPatch_funcCallExpr *printfCall = createReportFunctionSnippet(app);
     
-    // Find the printf function
-    std::vector<BPatch_function*> printfFuncs;
-    appImage->findFunction("printf", printfFuncs);
-    if (printfFuncs.size() == 0) {
-        fprintf(stderr, "Could not find printf\n");
-    }
-
-	std::vector<BPatch_snippet*> printfArgs;
-    BPatch_snippet* fmt = 
-        new BPatch_constExpr("Hash corrupted!\n");
-    printfArgs.push_back(fmt);
-        
-        
-    // Construct a function call snippet
-    BPatch_funcCallExpr *printfCall = new BPatch_funcCallExpr(*(printfFuncs[0]), printfArgs);
-    
+    // if ( result != correctHash) { report (); }
     BPatch_ifExpr *checkHash = new BPatch_ifExpr(
 					BPatch_boolExpr(BPatch_ne, *result, *correctHashConst), 
 					*printfCall);
  	
  	checkerSnippet.push_back(checkHash);
- 	
- 	
- 	if (!app->insertSnippet(BPatch_sequence(checkerSnippet), *(block->findEntryPoint()))) {
-      	  fprintf(stderr, "insertSnippet failed\n");
-    }
       	
  	return checkerSnippet;
-}
-
-void report() {
-	//Kill them all
-	puts("Hash was incoreect!");
-}
-
-unsigned long hashAdd(std::vector<unsigned long> insts) {
-	unsigned long hash = 0;
-	std::vector<unsigned long>::iterator instr_iter;
-	
-	for (instr_iter = insts.begin(); instr_iter != insts.end(); ++instr_iter) {
-		unsigned long current = *instr_iter;
-		hash += current;
-	}
-	
-	return hash;
-}
-
-unsigned char hashXor(std::vector<unsigned char> insts) {
-	unsigned char hash = 0x45;
-	std::vector<unsigned char>::iterator instr_iter;
-	
-	for (instr_iter = insts.begin(); instr_iter != insts.end(); ++instr_iter) {
-		unsigned char current = *instr_iter;
-		hash ^= current;
-	}
-	
-	return hash;
 }
 
 unsigned long computeHash(BPatch_basicBlock *block, unsigned long (*hashFunction)(std::vector<unsigned long>)) {
@@ -204,7 +174,7 @@ unsigned long computeHash(BPatch_basicBlock *block, unsigned long (*hashFunction
 	
 	for (instr_iter = insns.begin(); instr_iter != insns.end(); ++instr_iter) {
 		Dyninst::InstructionAPI::Instruction::Ptr inst = *instr_iter; 
-		if (inst)
+
 		for (unsigned int i = 0; i < inst->size(); i++) {			
 			instValues.push_back(inst->rawByte(i));
 		}
@@ -245,8 +215,6 @@ int main() {
         fprintf(stderr, "startInstrumenting failed\n");
         exit(1);
     }
-    //bpatch.setTypeChecking(false);
-    //hashFunctions.push_back(*hashAdd, *hashXor);
     
     BPatch_image *appImage = app->getImage();
 	std::vector<BPatch_function *> funcs; 
@@ -256,16 +224,21 @@ int main() {
     std::set<BPatch_basicBlock *>::iterator block_iter;
 	for (block_iter = blocks.begin(); block_iter != blocks.end(); ++block_iter) {
 		BPatch_basicBlock *block = *block_iter; 
-		char correctHash = 0x26;//computeHash(block, *hashAdd);
-		cout<<hex<<block->getStartAddress()<<" "<< block->getEndAddress()<<" "<< block->size()<<endl;
-		std::vector<BPatch_snippet *> checkerSnipp = checkerSnippet(app, block, 0, 
-					correctHash, 0x81000a1, block->size());
+		// Choose a hashFunction
 		
-		//  Insert the snippet
-    	//if (!app->insertSnippet(BPatch_sequence(checkerSnipp), *(block->findEntryPoint()))) {
-      	  //fprintf(stderr, "insertSnippet failed\n");
-      	//}
-      	break;
+		// Calculate right hash
+		char correctHash = 0x6c;//computeHash(block, *hashAdd);
+		cout<<hex<<block->getStartAddress()<<" "<< block->getEndAddress()<<" "<< block->size()<<endl;
+		
+		// Generate snippet
+		BPatch_Vector<BPatch_snippet *> checkerSnippet = 
+			createCheckerSnippet(app, correctHash, 0x810017b, block->size());
+		
+		// Insert the snippet
+    	if (!app->insertSnippet(BPatch_sequence(checkerSnippet), *(block->findEntryPoint()))) {
+      	  	fprintf(stderr, "insertSnippet failed\n");
+      	}
+      	releaseBPatchVectorContents(checkerSnippet);
 	}
 
     // Finish instrumentation 
