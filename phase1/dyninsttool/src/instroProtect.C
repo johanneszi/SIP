@@ -412,8 +412,29 @@ int main() {
     std::vector<char*> functions;
     functions.push_back("print");
     functions.push_back("InterestingProcedure");
-    Graph g = createCheckerNetwork(app, 7, functions);
+    Graph g = createCheckerNetwork(app, 2, functions);
     
+    //Graph::vertex_iterator vertices, verticesEnd;
+    //boost::tie(vertices, verticesEnd) = boost::vertices(g);
+    
+   	typedef Graph::vertex_descriptor Vertex;
+   	typedef Graph::vertex_iterator vertex_iter;
+    std::pair<vertex_iter, vertex_iter> vp;
+    for (vp = vertices(g); vp.first != vp.second; ++vp.first) {
+      Vertex v = *vp.first;
+      std::cout << g[v].block->getBlockNumber() <<  "\n " << endl;
+      
+      typedef Graph::adjacency_iterator adj_vertex_iter;
+      std::pair<adj_vertex_iter, adj_vertex_iter> adj_vp;
+      
+      for (adj_vp = adjacent_vertices(v, g); adj_vp.first != adj_vp.second; ++adj_vp.first) {
+      	v = *adj_vp.first;
+      	std::cout << g[v].block->getBlockNumber() <<  " " << endl;
+      }
+      cout<<"\n"<<endl;
+    }
+
+    /*
     BPatch_image *appImage = app->getImage();
 	std::vector<BPatch_function *> funcs; 
 	appImage->findFunction("InterestingProcedure", funcs);
@@ -450,7 +471,7 @@ int main() {
       	  	fprintf(stderr, "insertSnippet failed\n");
       	}
       	releaseBPatchVectorContents(checkerSnippet);
-	}
+	}*/
 
     // Finish instrumentation 
     const char* progName2 = "build/InterestingProgram-rewritten";
