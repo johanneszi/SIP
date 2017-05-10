@@ -1,5 +1,11 @@
 #include <stdio.h>
 
+void print(char *message)
+{
+    printf("%s\n", message);
+}
+
+
 void InterestingProcedure()
 {
     printf("\t This is an interesting procedure\n");
