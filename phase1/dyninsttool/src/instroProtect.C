@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <time.h>
 
 #include "BPatch.h"
 #include "BPatch_addressSpace.h"
@@ -9,9 +10,18 @@
 #include "BPatch_function.h"
 #include "BPatch_flowGraph.h"
 #include "Instruction.h"
+#include "InstructionCategories.h"
+
+#define NUMBER_HASHFUNCTIONS 2
 
 using namespace std;
 using namespace Dyninst;
+
+typedef BPatch_Vector<BPatch_snippet *> (hashFunction) (BPatch_addressSpace*, BPatch_variableExpr*,
+													unsigned long, long, char);
+													
+hashFunction createHashFunctionAddSnippet;
+hashFunction createHashFunctionSubSnippet;
 
 // Create an instance of class BPatch
 BPatch bpatch;
@@ -25,7 +35,9 @@ typedef enum {
     create,
     attach,
     open
-} accessType_t; 
+} accessType_t;
+
+typedef void (*BPatchDynLibraryCallback)(BPatch_thread *thr, BPatch_object *obj, bool loaded); 
 
 // Attach, create, or open a file for rewriting
 BPatch_addressSpace* startInstrumenting(accessType_t accessType,
@@ -91,68 +103,165 @@ BPatch_funcCallExpr* createReportFunctionSnippet(BPatch_addressSpace* app) {
     return printfCall;
 }
 
+BPatch_Vector<BPatch_snippet *> createHashFunctionSubSnippet(BPatch_addressSpace* app, BPatch_variableExpr* result,
+													unsigned long startAddress, long blockSize,
+													char hashStartValue) {
+	
+	BPatch_image* appImage = app->getImage();
+	BPatch_Vector<BPatch_snippet *> hashFunctionSnippet;
+	
+	BPatch_variableExpr* counter = 
+        app->malloc(*(appImage->findType("unsigned long")), "counter");
+    
+    BPatch_variableExpr* size = 
+        app->malloc(*(appImage->findType("long")), "size");
+    
+    // couter = startAddress 
+    BPatch_arithExpr *assignCounter = new BPatch_arithExpr(BPatch_assign,
+    									*counter, BPatch_constExpr(startAddress));
+	
+	// result = 0									
+    BPatch_arithExpr *assignResult = new BPatch_arithExpr (BPatch_assign,
+    									*result, BPatch_constExpr(hashStartValue));
+    									
+    // size = size									
+    BPatch_arithExpr *assignSize = new BPatch_arithExpr (BPatch_assign,
+    									*size, BPatch_constExpr(blockSize));
+    									
+   	hashFunctionSnippet.push_back(assignResult);
+   	hashFunctionSnippet.push_back(assignCounter);
+   	hashFunctionSnippet.push_back(assignSize);
+   	
+   	BPatch_Vector<BPatch_snippet *> whileBody;
+	
+	// result + currentByte
+	BPatch_arithExpr *addByte = new BPatch_arithExpr(BPatch_minus, *result, BPatch_arithExpr(BPatch_deref, *counter));
+	
+	// result = result + currentByte
+  	BPatch_arithExpr *hash = new BPatch_arithExpr(BPatch_assign, *result, *addByte);
+  	
+  	// count+1
+  	BPatch_arithExpr *countPlus = new BPatch_arithExpr(BPatch_plus, BPatch_constExpr(1), *counter);
+  	
+  	// count = count + 1
+  	BPatch_arithExpr *count = new BPatch_arithExpr(BPatch_assign, *counter, *countPlus);
+  	
+ 	// size-1
+  	BPatch_arithExpr *sizeMinus = new BPatch_arithExpr(BPatch_minus, *size, BPatch_constExpr(1));
+  	
+  	// count = count - 1
+  	BPatch_arithExpr *sizeMinusMinus = new BPatch_arithExpr(BPatch_assign, *size, *sizeMinus);
+  	
+  	// Add the created instructions to whileBody
+  	whileBody.push_back(hash);
+  	whileBody.push_back(count);
+  	whileBody.push_back(sizeMinusMinus);
+   
+   	// counter < endAddress
+   	BPatch_boolExpr *counterLEndAddress = new BPatch_boolExpr(BPatch_gt, *size, BPatch_constExpr((long)0));
+   	
+   	// while(counter < endAddress) { whileBody }
+   	BPatch_whileExpr *whileHash = new BPatch_whileExpr(*counterLEndAddress, BPatch_sequence(whileBody));
+    				
+    hashFunctionSnippet.push_back(whileHash);
+    									
+   	return hashFunctionSnippet;
+}
+
+BPatch_Vector<BPatch_snippet *> createHashFunctionAddSnippet(BPatch_addressSpace* app, BPatch_variableExpr* result,
+													unsigned long startAddress, long blockSize,
+													char hashStartValue) {
+	
+	BPatch_image* appImage = app->getImage();
+	BPatch_Vector<BPatch_snippet *> hashFunctionSnippet;
+	
+	BPatch_variableExpr* counter = 
+        app->malloc(*(appImage->findType("unsigned long")), "counter");
+    
+    BPatch_variableExpr* size = 
+        app->malloc(*(appImage->findType("long")), "size");
+    
+    // couter = startAddress 
+    BPatch_arithExpr *assignCounter = new BPatch_arithExpr(BPatch_assign,
+    									*counter, BPatch_constExpr(startAddress));
+	
+	// result = 0									
+    BPatch_arithExpr *assignResult = new BPatch_arithExpr (BPatch_assign,
+    									*result, BPatch_constExpr(hashStartValue));
+    									
+    // size = size									
+    BPatch_arithExpr *assignSize = new BPatch_arithExpr (BPatch_assign,
+    									*size, BPatch_constExpr(blockSize));
+    									
+   	hashFunctionSnippet.push_back(assignResult);
+   	hashFunctionSnippet.push_back(assignCounter);
+   	hashFunctionSnippet.push_back(assignSize);
+   	
+   	BPatch_Vector<BPatch_snippet *> whileBody;
+	
+	// result + currentByte
+	BPatch_arithExpr *addByte = new BPatch_arithExpr(BPatch_plus, *result, BPatch_arithExpr(BPatch_deref, *counter));
+	
+	// result = result + currentByte
+  	BPatch_arithExpr *hash = new BPatch_arithExpr(BPatch_assign, *result, *addByte);
+  	
+  	// count+1
+  	BPatch_arithExpr *countPlus = new BPatch_arithExpr(BPatch_plus, BPatch_constExpr(1), *counter);
+  	
+  	// count = count + 1
+  	BPatch_arithExpr *count = new BPatch_arithExpr(BPatch_assign, *counter, *countPlus);
+  	
+ 	// size-1
+  	BPatch_arithExpr *sizeMinus = new BPatch_arithExpr(BPatch_minus, *size, BPatch_constExpr(1));
+  	
+  	// count = count - 1
+  	BPatch_arithExpr *sizeMinusMinus = new BPatch_arithExpr(BPatch_assign, *size, *sizeMinus);
+  	
+  	// Add the created instructions to whileBody
+  	whileBody.push_back(hash);
+  	whileBody.push_back(count);
+  	whileBody.push_back(sizeMinusMinus);
+   
+   	// counter < endAddress
+   	BPatch_boolExpr *counterLEndAddress = new BPatch_boolExpr(BPatch_gt, *size, BPatch_constExpr((long)0));
+   	
+   	// while(counter < endAddress) { whileBody }
+   	BPatch_whileExpr *whileHash = new BPatch_whileExpr(*counterLEndAddress, BPatch_sequence(whileBody));
+    				
+    hashFunctionSnippet.push_back(whileHash);
+    									
+   	return hashFunctionSnippet;
+}
+
 BPatch_Vector<BPatch_snippet *> createCheckerSnippet(BPatch_addressSpace* app, char correctHash, 
 													unsigned long startAddress, unsigned long size,
-													BPatch_binOp hashFunction = BPatch_plus,
-													char hashStartValue = 0) {
+													hashFunction *snippetHashFunction, char hashStartValue = 0) {
 	BPatch_image* appImage = app->getImage();
 	
 	// Holds all created snippets
 	BPatch_Vector<BPatch_snippet *> checkerSnippet;
-	
-	BPatch_variableExpr* counter = 
-        app->malloc(*(appImage->findType("unsigned long")), "counter");
     
     BPatch_variableExpr* result = 
         app->malloc(*(appImage->findType("char")), "result");
         	
     BPatch_variableExpr* correctHashConst = 
         app->malloc(*(appImage->findType("char")), "correctHashConst");
-        
-    // couter = startAddress 
-    BPatch_arithExpr *assignCounter = new BPatch_arithExpr(BPatch_assign,
-    									*counter, BPatch_constExpr(startAddress));
-    
-    // result = 0									
-    BPatch_arithExpr *assignResult = new BPatch_arithExpr (BPatch_assign,
-    									*result, BPatch_constExpr(hashStartValue));
     						
     // correctHashConst = 0									
     BPatch_arithExpr *assignCorrectHashConst = new BPatch_arithExpr (BPatch_assign,
-   										*correctHashConst, BPatch_constExpr(correctHash));
-    								
-    									
-   	checkerSnippet.push_back(assignCounter);
-   	checkerSnippet.push_back(assignResult);
+   										*correctHashConst, BPatch_constExpr((unsigned int)correctHash));
+   										
    	checkerSnippet.push_back(assignCorrectHashConst);
   	
-  	BPatch_Vector<BPatch_snippet *> whileBody;
-	
-	// result + currentByte
-	BPatch_arithExpr *addByte = new BPatch_arithExpr(hashFunction, *result, BPatch_arithExpr(BPatch_deref, *counter));
-	
-	// result = result + currentByte
-  	BPatch_arithExpr *hash = new BPatch_arithExpr(BPatch_assign, *result, *addByte);
-  	
-  	// count++
-  	BPatch_arithExpr *countPlus = new BPatch_arithExpr(BPatch_plus, BPatch_constExpr(1), *counter);
-  	
-  	// count = count + 1
-  	BPatch_arithExpr *count = new BPatch_arithExpr(BPatch_assign, *counter, *countPlus);
-  	
-  	// Add the created instructions to whileBody
-  	whileBody.push_back(hash);
-  	whileBody.push_back(count);
-   
-   	// counter < endAddress
-   	BPatch_boolExpr *counterLEndAddress = new BPatch_boolExpr(BPatch_lt, *counter, BPatch_constExpr(startAddress + size));
-   	
-   	// while(counter < endAddress) { whileBody }
-   	BPatch_whileExpr *whileHash = new BPatch_whileExpr(*counterLEndAddress, BPatch_sequence(whileBody));
-    				
-    checkerSnippet.push_back(whileHash);
+  	// Create a hash function snippet
+    BPatch_Vector<BPatch_snippet *> hashFunctionSnippet = snippetHashFunction(app, result,
+													startAddress, size,
+													hashStartValue);
     
-    // create report function snippet
+    						
+    checkerSnippet.insert(std::end(checkerSnippet), std::begin(hashFunctionSnippet), std::end(hashFunctionSnippet));
+    
+    // Create report function snippet
     BPatch_funcCallExpr *printfCall = createReportFunctionSnippet(app);
     
     // if ( result != correctHash) { report (); }
@@ -165,16 +274,44 @@ BPatch_Vector<BPatch_snippet *> createCheckerSnippet(BPatch_addressSpace* app, c
  	return checkerSnippet;
 }
 
-unsigned long computeHash(BPatch_basicBlock *block, unsigned long (*hashFunction)(std::vector<unsigned long>)) {
+char hashFunctionAdd(std::vector<char> values) {
+	char result = 0;
+	for(auto value : values) 
+		result += value;
+	
+	return result;
+}
+
+char hashFunctionSub(std::vector<char> values) {
+	char result = 0;
+	for(auto value : values) 
+		result -=  value;
+	
+	return result;
+}
+
+int blockLengthUntilCall(BPatch_basicBlock *block) {
+	std::vector<Dyninst::InstructionAPI::Instruction::Ptr> insns; 
+	block->getInstructions(insns);
+	
+	int length = 0;
+	
+	for (Dyninst::InstructionAPI::Instruction::Ptr inst : insns) {
+		if (inst->getCategory() == Dyninst::InstructionAPI::c_CallInsn) { break; }
+		length+=inst->size();
+	}
+	
+	return length;
+}
+
+char computeHash(BPatch_basicBlock *block, char (*hashFunction)(std::vector<char>)) {
 	std::vector<Dyninst::InstructionAPI::Instruction::Ptr> insns; 
 	block->getInstructions(insns);
 
-	std::vector<Dyninst::InstructionAPI::Instruction::Ptr>::iterator instr_iter;
-	std::vector<unsigned long> instValues;
+	std::vector<char> instValues;
 	
-	for (instr_iter = insns.begin(); instr_iter != insns.end(); ++instr_iter) {
-		Dyninst::InstructionAPI::Instruction::Ptr inst = *instr_iter; 
-
+	for (Dyninst::InstructionAPI::Instruction::Ptr inst : insns) {
+		if (inst->getCategory() == Dyninst::InstructionAPI::c_CallInsn) { break; }
 		for (unsigned int i = 0; i < inst->size(); i++) {			
 			instValues.push_back(inst->rawByte(i));
 		}
@@ -202,6 +339,8 @@ void finishInstrumenting(BPatch_addressSpace* app, const char* newName) {
 }
 
 int main() {
+	srand(time(NULL));
+
     // Set up information about the program to be instrumented
     const char* progName = "build/InterestingProgram";
     int progPID = 42;
@@ -227,12 +366,25 @@ int main() {
 		// Choose a hashFunction
 		
 		// Calculate right hash
-		char correctHash = 0x6c;//computeHash(block, *hashAdd);
-		cout<<hex<<block->getStartAddress()<<" "<< block->getEndAddress()<<" "<< block->size()<<endl;
+		char correctHash = 0;
+		//cout<<hex<<block->getStartAddress()<<" "<< block->getEndAddress()<<" "<< block->size()<<endl;
 		
+		hashFunction *hashFunctionSnippet = NULL;
+		int chooseHashFunction = rand() % NUMBER_HASHFUNCTIONS;
+    	//cout << chooseHashFunction << endl;
+    	if (chooseHashFunction == 0) {
+    		hashFunctionSnippet = &createHashFunctionAddSnippet;
+    		correctHash = computeHash(block, *hashFunctionAdd);
+    		cout<<"ADD" << endl;
+    	} else {
+    		hashFunctionSnippet = &createHashFunctionSubSnippet;
+    		correctHash = computeHash(block, *hashFunctionSub);
+    		cout<<"SUB" << endl;
+   		}
+    	cout << hex<<int(correctHash) <<" " <<blockLengthUntilCall(block) << endl;
 		// Generate snippet
 		BPatch_Vector<BPatch_snippet *> checkerSnippet = 
-			createCheckerSnippet(app, correctHash, 0x810017b, block->size());
+			createCheckerSnippet(app, correctHash, 0x810019e, blockLengthUntilCall(block), hashFunctionSnippet);
 		
 		// Insert the snippet
     	if (!app->insertSnippet(BPatch_sequence(checkerSnippet), *(block->findEntryPoint()))) {
@@ -244,5 +396,7 @@ int main() {
     // Finish instrumentation 
     const char* progName2 = "build/InterestingProgram-rewritten";
     finishInstrumenting(app, progName2);
+    
+    return 0;
 }
 
