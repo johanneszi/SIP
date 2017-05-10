@@ -1,5 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <time.h>
+#include <algorithm>
 
 #include "BPatch.h"
 #include "BPatch_addressSpace.h"
@@ -9,6 +11,9 @@
 #include "BPatch_function.h"
 #include "BPatch_flowGraph.h"
 #include "Instruction.h"
+
+#include <boost/graph/adjacency_list.hpp>
+#include <boost/graph/graphviz.hpp>
 
 using namespace std;
 using namespace Dyninst;
@@ -26,6 +31,15 @@ typedef enum {
     attach,
     open
 } accessType_t; 
+
+// Network
+struct Vertex{BPatch_basicBlock *block;};
+struct Edge{std::string blah;};
+
+typedef boost::adjacency_list<boost::setS, boost::vecS, boost::bidirectionalS, Vertex, Edge> Graph;
+//typedef boost::graph_traits<Graph>::disallow_parallel_edges;
+typedef boost::graph_traits<Graph>::vertex_descriptor vertex_t;
+typedef boost::graph_traits<Graph>::edge_descriptor edge_t;
 
 // Attach, create, or open a file for rewriting
 BPatch_addressSpace* startInstrumenting(accessType_t accessType,
@@ -201,7 +215,57 @@ void finishInstrumenting(BPatch_addressSpace* app, const char* newName) {
     }
 }
 
+Graph createCheckerNetwork(BPatch_addressSpace* app, int connectivity, std::vector<char*> functions){
+	Graph g;
+	BPatch_image *appImage = app->getImage();
+	std::vector<vertex_t> vertices;
+	for (auto name : functions){
+		std::vector<BPatch_function *> funcs;
+		appImage->findFunction(name, funcs);
+		std::vector<BPatch_function *>::iterator func_iter;
+		for (func_iter = funcs.begin(); func_iter != funcs.end(); ++func_iter){
+			std::set<BPatch_basicBlock *> blocks = getBasicBlocksForFunction(*func_iter);
+    			std::set<BPatch_basicBlock *>::iterator block_iter;
+			for (block_iter = blocks.begin(); block_iter != blocks.end(); ++block_iter) {
+				BPatch_basicBlock *block = *block_iter; 
+				vertex_t u = boost::add_vertex(g);
+				g[u].block = block;
+				vertices.push_back(u);
+			}
+		}
+	}
+	connectivity = min((int)vertices.size(), connectivity);
+	std::vector<vertex_t> vertices_destination = vertices;
+	for (auto block_from : vertices){
+		int out = 0;
+		while(out < connectivity){
+			vertex_t block_to;
+			int rand_pos;
+			while(true){
+				rand_pos = rand() % vertices_destination.size();
+				std::cout<<rand_pos<<endl;
+				block_to = vertices_destination[rand_pos];
+				if (block_from != block_to){
+					break;
+				}
+			}
+			if(boost::add_edge(block_to, block_from, g).second){
+				Graph::in_edge_iterator in_i, in_end;
+      			boost::tie(in_i, in_end) = in_edges(block_to,g);
+				//if ((int)std::distance(in_i, in_end) == connectivity){
+				//	vertices_destination.erase(vertices_destination.begin() + rand_pos);
+				//}
+				out += 1;
+			}
+		}
+	}
+	write_graphviz_dp(std::cout, g);
+	return g;
+}
+
 int main() {
+	srand(time(NULL));
+	
     // Set up information about the program to be instrumented
     const char* progName = "build/InterestingProgram";
     int progPID = 42;
@@ -215,6 +279,10 @@ int main() {
         fprintf(stderr, "startInstrumenting failed\n");
         exit(1);
     }
+    std::vector<char*> functions;
+    functions.push_back("print");
+    functions.push_back("InterestingProcedure");
+    Graph g = createCheckerNetwork(app, 2, functions);
     
     BPatch_image *appImage = app->getImage();
 	std::vector<BPatch_function *> funcs; 
