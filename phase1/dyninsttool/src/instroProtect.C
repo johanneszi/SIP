@@ -21,6 +21,7 @@
 #include <boost/graph/graphviz.hpp>
 
 #define NUMBER_HASHFUNCTIONS 2
+#define PLACEHOLDER 0x0
 
 using namespace std;
 using namespace Dyninst;
@@ -461,16 +462,15 @@ int main(int argc, char* argv[]) {
    	typedef Graph::vertex_iterator vertex_iter;
     std::pair<vertex_iter, vertex_iter> vp;
     
-    int adds = 0;
-    int subs = 0;
-    
 	for (vp = vertices(g); vp.first != vp.second; ++vp.first) {
     	Vertex v = *vp.first;
     	BPatch_basicBlock *basicBlock = g[v].block;
       	cout << "Block " << v << " with startAddress " << hex <<"0x"<< basicBlock->getStartAddress() << " checks:" << endl;
 		typedef Graph::adjacency_iterator adj_vertex_iter;
 		std::pair<adj_vertex_iter, adj_vertex_iter> adj_vp;
-
+		
+		int chooseHashFunction;
+		
 		// Generate snippet
 		BPatch_Vector<BPatch_snippet *> checkerSnippet; 
 
@@ -482,16 +482,14 @@ int main(int argc, char* argv[]) {
 			char correctHash = 0;
 
 			hashFunction *hashFunctionSnippet = NULL;
-			int chooseHashFunction = rand() % NUMBER_HASHFUNCTIONS;
+			chooseHashFunction = rand() % NUMBER_HASHFUNCTIONS;
 
 			if (chooseHashFunction == 0) {
 				hashFunctionSnippet = &createHashFunctionAddSnippet;
 				correctHash = computeHash(blockToCheck, *hashFunctionAdd);
-				adds++;
 			} else {
 				hashFunctionSnippet = &createHashFunctionSubSnippet;
 				correctHash = computeHash(blockToCheck, *hashFunctionSub);
-				subs++;
 			}
 
 			// Generate snippet
@@ -500,14 +498,30 @@ int main(int argc, char* argv[]) {
 		
 			checkerSnippet.insert(std::end(checkerSnippet), std::begin(currentCheckerSnippet), std::end(currentCheckerSnippet));	
 		}
-      
+		
+		if (vp.first != vp.second-1) {
+
+			hashFunction *hashFunctionSnippet = NULL;
+			chooseHashFunction = rand() % NUMBER_HASHFUNCTIONS;
+
+			if (chooseHashFunction == 0) {
+				hashFunctionSnippet = &createHashFunctionAddSnippet;
+			} else {
+				hashFunctionSnippet = &createHashFunctionSubSnippet;
+			}
+
+			BPatch_Vector<BPatch_snippet *> currentCheckerCheckSnippet = 
+					createCheckerSnippet(app, PLACEHOLDER, PLACEHOLDER, PLACEHOLDER, hashFunctionSnippet);
+		  	checkerSnippet.insert(std::end(checkerSnippet), std::begin(currentCheckerCheckSnippet), std::end(currentCheckerCheckSnippet));
+		}
+      	
     	// Insert the snippet
 		if (!app->insertSnippet(BPatch_sequence(checkerSnippet), *(basicBlock->findEntryPoint()))) {
       	  	fprintf(stderr, "insertSnippet failed\n");
       	}
       	releaseBPatchVectorContents(checkerSnippet);
     }
-    cout<< dec<< "Addittions " << adds << " Subtractions " << subs << endl;
+
 	// Finish instrumentation 
     const char* progName2 = "build/InterestingProgram-rewritten";
     finishInstrumenting(app, progName2);
