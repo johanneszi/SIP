@@ -2,6 +2,10 @@
 #include <stdlib.h>
 #include <time.h>
 #include <algorithm>
+#include <unistd.h>
+#include <fstream>
+#include <sstream>
+#include <string>
 
 #include "BPatch.h"
 #include "BPatch_addressSpace.h"
@@ -13,10 +17,10 @@
 #include "Instruction.h"
 #include "InstructionCategories.h"
 
-#define NUMBER_HASHFUNCTIONS 2
-
 #include <boost/graph/adjacency_list.hpp>
 #include <boost/graph/graphviz.hpp>
+
+#define NUMBER_HASHFUNCTIONS 2
 
 using namespace std;
 using namespace Dyninst;
@@ -30,49 +34,29 @@ hashFunction createHashFunctionSubSnippet;
 // Create an instance of class BPatch
 BPatch bpatch;
 
+// Public Variables
+int connectivity;
+bool verbose = false;
+const char *progName;
+const char *functionsFileName;
+
 // Uncomment this if you want to stop type checking
 // on BPatch snippets
 //bpatch.setTypeChecking(false);
-
-// Different ways to perform instrumentation
-typedef enum {
-    create,
-    attach,
-    open
-} accessType_t;
-
-typedef void (*BPatchDynLibraryCallback)(BPatch_thread *thr, BPatch_object *obj, bool loaded); 
 
 // Network
 struct Vertex{BPatch_basicBlock *block;};
 struct Edge{std::string blah;};
 
 typedef boost::adjacency_list<boost::setS, boost::vecS, boost::bidirectionalS, Vertex, Edge> Graph;
-//typedef boost::graph_traits<Graph>::disallow_parallel_edges;
 typedef boost::graph_traits<Graph>::vertex_descriptor vertex_t;
 typedef boost::graph_traits<Graph>::edge_descriptor edge_t;
 
-// Attach, create, or open a file for rewriting
-BPatch_addressSpace* startInstrumenting(accessType_t accessType,
-        const char* name,
-        int pid,
-        const char* argv[]) {
-    BPatch_addressSpace* handle = NULL;
-
-    switch(accessType) {
-        case create:
-            handle = bpatch.processCreate(name, argv);
-            if (!handle) { fprintf(stderr, "processCreate failed\n"); }
-            break;
-        case attach:
-            handle = bpatch.processAttach(name, pid);
-            if (!handle) { fprintf(stderr, "processAttach failed\n"); }
-            break;
-        case open:
-            // Open the binary file; do not open dependencies
-            handle = bpatch.openBinary(name, true);
-            if (!handle) { fprintf(stderr, "openBinary failed\n"); }
-            break;
+// Open a file for rewriting
+BPatch_addressSpace* startInstrumenting(const char* name) {
+    BPatch_addressSpace* handle = bpatch.openBinary(name, true);
+    if (!handle) { 
+    	fprintf(stderr, "openBinary failed\n"); 
     }
 
     return handle;
@@ -100,6 +84,8 @@ BPatch_funcCallExpr* createReportFunctionSnippet(BPatch_addressSpace* app) {
 	
 	// Find the printf function
     std::vector<BPatch_function*> printfFuncs;
+    
+    //TODO: Fix Dyninst library and actually insert printf
     appImage->findFunction("print", printfFuncs);
     
     if (printfFuncs.size() == 0) {
@@ -275,12 +261,12 @@ BPatch_Vector<BPatch_snippet *> createCheckerSnippet(BPatch_addressSpace* app, c
     checkerSnippet.insert(std::end(checkerSnippet), std::begin(hashFunctionSnippet), std::end(hashFunctionSnippet));
     
     // Create report function snippet
-    BPatch_funcCallExpr *printfCall = createReportFunctionSnippet(app);
+    BPatch_funcCallExpr *reportFunction = createReportFunctionSnippet(app);
     
     // if ( result != correctHash) { report (); }
     BPatch_ifExpr *checkHash = new BPatch_ifExpr(
 					BPatch_boolExpr(BPatch_ne, *result, *correctHashConst), 
-					*printfCall);
+					*reportFunction);
  	
  	checkerSnippet.push_back(checkHash);
       	
@@ -303,6 +289,10 @@ char hashFunctionSub(std::vector<char> values) {
 	return result;
 }
 
+bool instructionUsesAddress(Dyninst::InstructionAPI::Instruction::Ptr inst) {
+	return inst->getCategory() == Dyninst::InstructionAPI::c_CallInsn;
+}
+
 int blockLengthUntilCall(BPatch_basicBlock *block) {
 	std::vector<Dyninst::InstructionAPI::Instruction::Ptr> insns; 
 	block->getInstructions(insns);
@@ -310,8 +300,8 @@ int blockLengthUntilCall(BPatch_basicBlock *block) {
 	int length = 0;
 	
 	for (Dyninst::InstructionAPI::Instruction::Ptr inst : insns) {
-		if (inst->getCategory() == Dyninst::InstructionAPI::c_CallInsn) { break; }
-		length+=inst->size();
+		if (instructionUsesAddress(inst)) { break; }
+		length += inst->size();
 	}
 	
 	return length;
@@ -324,7 +314,7 @@ char computeHash(BPatch_basicBlock *block, char (*hashFunction)(std::vector<char
 	std::vector<char> instValues;
 	
 	for (Dyninst::InstructionAPI::Instruction::Ptr inst : insns) {
-		if (inst->getCategory() == Dyninst::InstructionAPI::c_CallInsn) { break; }
+		if (instructionUsesAddress(inst)) { break; }
 		for (unsigned int i = 0; i < inst->size(); i++) {			
 			instValues.push_back(inst->rawByte(i));
 		}
@@ -334,30 +324,25 @@ char computeHash(BPatch_basicBlock *block, char (*hashFunction)(std::vector<char
 }
 
 void finishInstrumenting(BPatch_addressSpace* app, const char* newName) {
-    BPatch_process* appProc = dynamic_cast<BPatch_process*>(app);
     BPatch_binaryEdit* appBin = dynamic_cast<BPatch_binaryEdit*>(app);
-   
-    if (appProc) {
-        if (!appProc->continueExecution()) {
-            fprintf(stderr, "continueExecution failed\n");
-        }
-        while (!appProc->isTerminated()) {
-            bpatch.waitForStatusChange();
-        }
-    } else if (appBin) {
-        if (!appBin->writeFile(newName)) {
-            fprintf(stderr,"writeFile failed\n");
-        }
+    
+    if (!appBin) {
+    	fprintf(stderr,"appBin not defined!\n");
+    	return;
+    }
+    
+    if (!appBin->writeFile(newName)) {
+		fprintf(stderr,"writeFile failed\n");
     }
 }
 
-Graph createCheckerNetwork(BPatch_addressSpace* app, int connectivity, std::vector<char*> functions){
+Graph createCheckerNetwork(BPatch_addressSpace* app, int connectivity, std::vector<std::string> functions){
 	Graph g;
 	BPatch_image *appImage = app->getImage();
 	std::vector<vertex_t> vertices;
 	for (auto name : functions){
 		std::vector<BPatch_function *> funcs;
-		appImage->findFunction(name, funcs);
+		appImage->findFunction(name.c_str(), funcs);
 		for  (auto singleFunc : funcs){
 			std::set<BPatch_basicBlock *> blocks = getBasicBlocksForFunction(singleFunc);
 			for (auto singleBlock : blocks){
@@ -368,11 +353,19 @@ Graph createCheckerNetwork(BPatch_addressSpace* app, int connectivity, std::vect
 			}
 		}
 	}
+	
+	if (connectivity > (int) vertices.size() - 1) {
+		cout << "WARNING" << endl;
+		cout << "The specified connectivity " << connectivity << " is larger than the number of basic blocks." << endl;
+		cout << "Connectivity set to: " << vertices.size() - 1 << endl;
+	}
+	
 	connectivity = std::min((int)(vertices.size()-1), connectivity);
 	std::vector<vertex_t> verticesDest = vertices;
+	
 	for (auto blockFrom : vertices){
 		int out = 0;
-		while(out < connectivity){
+		while(out < connectivity) {
 			vertex_t blockTo;
 			int rand_pos;
 			while(true){
@@ -382,42 +375,95 @@ Graph createCheckerNetwork(BPatch_addressSpace* app, int connectivity, std::vect
 					break;
 				}
 			}
-			if(boost::add_edge(blockTo, blockFrom, g).second){
+			if(boost::add_edge(blockTo, blockFrom, g).second) {
 				Graph::in_edge_iterator inI, inEnd;
       			boost::tie(inI, inEnd) = in_edges(blockTo,g);
 				out += 1;
 			}
 		}
 	}
-	//write_graphviz(std::cout, g);
+	
+	if (verbose) { 
+		write_graphviz(std::cout, g); 
+	}
+	
 	return g;
 }
 
-int main() {
+void usage() {
+	puts("instroProtect [OPTIONS]\n" 
+		 "\t-b\tname of binary to protect\n"
+		 "\t-c\tpositive number indicating how many checkers check each basic block.\n"
+		 "\t-f\tname of a file containing the names of functions to be protected (line separated)\n"
+		 "\t-v\tverbose output including a \"nice\" graph of the checker network\n");
+	exit(1);
+}
+
+void parseArgs(int argc, char** argv) {
+
+	int opt;
+	while((opt = getopt(argc, argv, "b:c:f:v")) != EOF) {
+		switch(opt) {
+			case 'b':
+				progName = optarg;
+				break;
+			case 'c':
+				connectivity = std::stoi(optarg);
+				break;
+			case 'f':
+				functionsFileName = optarg;
+				break;
+			case 'v':
+				verbose = true;
+				break;
+			default:
+				usage();
+		}
+	}
+	
+	if(progName == NULL || connectivity < 1 || functionsFileName == NULL) {
+		usage();
+	}
+}
+
+std::vector<std::string> parseFunctionToCheckNames() {
+	std::vector<std::string> functions;
+	std::ifstream infile(functionsFileName);
+		
+	std::string line;
+	while (std::getline(infile, line)) {
+		functions.push_back(line);
+	}
+	
+	if(functions.size() == 0) {
+		usage();
+	}
+			
+	return functions;
+}
+
+int main(int argc, char* argv[]) {
+	parseArgs(argc, argv);
+	
 	srand(time(NULL));
 
-    // Set up information about the program to be instrumented
-    const char* progName = "build/InterestingProgram";
-    int progPID = 42;
-    const char* progArgv[] = {"InterestingProgram", "-h", NULL};
-    accessType_t mode = open;
-
-    // Create/attach/open a binary
-    BPatch_addressSpace* app = 
-        startInstrumenting(mode, progName, progPID, progArgv);
+    // Open a binary
+    BPatch_addressSpace* app = startInstrumenting(progName);
     if (!app) {
         fprintf(stderr, "startInstrumenting failed\n");
         exit(1);
     }
     
-    std::vector<char*> functions;
-    functions.push_back((char *)"main");
-    functions.push_back((char *)"InterestingProcedure");
-    Graph g = createCheckerNetwork(app, 2, functions);
+    std::vector<std::string> functions = parseFunctionToCheckNames();
     
+    Graph g = createCheckerNetwork(app, connectivity, functions);
    	typedef Graph::vertex_descriptor Vertex;
    	typedef Graph::vertex_iterator vertex_iter;
     std::pair<vertex_iter, vertex_iter> vp;
+    
+    int adds = 0;
+    int subs = 0;
+    
 	for (vp = vertices(g); vp.first != vp.second; ++vp.first) {
     	Vertex v = *vp.first;
     	BPatch_basicBlock *basicBlock = g[v].block;
@@ -441,9 +487,11 @@ int main() {
 			if (chooseHashFunction == 0) {
 				hashFunctionSnippet = &createHashFunctionAddSnippet;
 				correctHash = computeHash(blockToCheck, *hashFunctionAdd);
+				adds++;
 			} else {
 				hashFunctionSnippet = &createHashFunctionSubSnippet;
 				correctHash = computeHash(blockToCheck, *hashFunctionSub);
+				subs++;
 			}
 
 			// Generate snippet
@@ -459,7 +507,7 @@ int main() {
       	}
       	releaseBPatchVectorContents(checkerSnippet);
     }
-    
+    cout<< dec<< "Addittions " << adds << " Subtractions " << subs << endl;
 	// Finish instrumentation 
     const char* progName2 = "build/InterestingProgram-rewritten";
     finishInstrumenting(app, progName2);
