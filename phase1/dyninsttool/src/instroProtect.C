@@ -389,7 +389,7 @@ Graph createCheckerNetwork(BPatch_addressSpace* app, int connectivity, std::vect
 			}
 		}
 	}
-	write_graphviz(std::cout, g);
+	//write_graphviz(std::cout, g);
 	return g;
 }
 
@@ -409,71 +409,58 @@ int main() {
         fprintf(stderr, "startInstrumenting failed\n");
         exit(1);
     }
-    std::vector<char*> functions;
-    functions.push_back("print");
-    functions.push_back("InterestingProcedure");
-    Graph g = createCheckerNetwork(app, 2, functions);
     
-    //Graph::vertex_iterator vertices, verticesEnd;
-    //boost::tie(vertices, verticesEnd) = boost::vertices(g);
+    std::vector<char*> functions;
+    functions.push_back((char *)"main");
+    functions.push_back((char *)"InterestingProcedure");
+    Graph g = createCheckerNetwork(app, 2, functions);
     
    	typedef Graph::vertex_descriptor Vertex;
    	typedef Graph::vertex_iterator vertex_iter;
     std::pair<vertex_iter, vertex_iter> vp;
-    for (vp = vertices(g); vp.first != vp.second; ++vp.first) {
-      Vertex v = *vp.first;
-      std::cout << g[v].block->getBlockNumber() <<  "\n " << endl;
-      
-      typedef Graph::adjacency_iterator adj_vertex_iter;
-      std::pair<adj_vertex_iter, adj_vertex_iter> adj_vp;
-      
-      for (adj_vp = adjacent_vertices(v, g); adj_vp.first != adj_vp.second; ++adj_vp.first) {
-      	v = *adj_vp.first;
-      	std::cout << g[v].block->getBlockNumber() <<  " " << endl;
-      }
-      cout<<"\n"<<endl;
-    }
+	for (vp = vertices(g); vp.first != vp.second; ++vp.first) {
+    	Vertex v = *vp.first;
+    	BPatch_basicBlock *basicBlock = g[v].block;
+      	cout << "Block " << v << " with startAddress " << hex <<"0x"<< basicBlock->getStartAddress() << " checks:" << endl;
+		typedef Graph::adjacency_iterator adj_vertex_iter;
+		std::pair<adj_vertex_iter, adj_vertex_iter> adj_vp;
 
-    /*
-    BPatch_image *appImage = app->getImage();
-	std::vector<BPatch_function *> funcs; 
-	appImage->findFunction("InterestingProcedure", funcs);
-    std::set<BPatch_basicBlock *> blocks = getBasicBlocksForFunction(funcs[0]);
-    
-    std::set<BPatch_basicBlock *>::iterator block_iter;
-	for (block_iter = blocks.begin(); block_iter != blocks.end(); ++block_iter) {
-		BPatch_basicBlock *block = *block_iter; 
-		// Choose a hashFunction
-		
-		// Calculate right hash
-		char correctHash = 0;
-		//cout<<hex<<block->getStartAddress()<<" "<< block->getEndAddress()<<" "<< block->size()<<endl;
-		
-		hashFunction *hashFunctionSnippet = NULL;
-		int chooseHashFunction = rand() % NUMBER_HASHFUNCTIONS;
-    	//cout << chooseHashFunction << endl;
-    	if (chooseHashFunction == 0) {
-    		hashFunctionSnippet = &createHashFunctionAddSnippet;
-    		correctHash = computeHash(block, *hashFunctionAdd);
-    		cout<<"ADD" << endl;
-    	} else {
-    		hashFunctionSnippet = &createHashFunctionSubSnippet;
-    		correctHash = computeHash(block, *hashFunctionSub);
-    		cout<<"SUB" << endl;
-   		}
-    	cout << hex<<int(correctHash) <<" " <<blockLengthUntilCall(block) << endl;
 		// Generate snippet
-		BPatch_Vector<BPatch_snippet *> checkerSnippet = 
-			createCheckerSnippet(app, correctHash, 0x810019e, blockLengthUntilCall(block), hashFunctionSnippet);
+		BPatch_Vector<BPatch_snippet *> checkerSnippet; 
+
+		for (adj_vp = adjacent_vertices(v, g); adj_vp.first != adj_vp.second; ++adj_vp.first) {
+			v = *adj_vp.first;
+			BPatch_basicBlock *blockToCheck = g[v].block;
+			cout<< "\tBlock " << v << " with startAddress " << "0x"<< blockToCheck->getStartAddress() <<endl;
+
+			char correctHash = 0;
+
+			hashFunction *hashFunctionSnippet = NULL;
+			int chooseHashFunction = rand() % NUMBER_HASHFUNCTIONS;
+
+			if (chooseHashFunction == 0) {
+				hashFunctionSnippet = &createHashFunctionAddSnippet;
+				correctHash = computeHash(blockToCheck, *hashFunctionAdd);
+			} else {
+				hashFunctionSnippet = &createHashFunctionSubSnippet;
+				correctHash = computeHash(blockToCheck, *hashFunctionSub);
+			}
+
+			// Generate snippet
+			BPatch_Vector<BPatch_snippet *> currentCheckerSnippet = 
+				createCheckerSnippet(app, correctHash, blockToCheck->getStartAddress(), blockLengthUntilCall(blockToCheck), hashFunctionSnippet);
 		
-		// Insert the snippet
-    	if (!app->insertSnippet(BPatch_sequence(checkerSnippet), *(block->findEntryPoint()))) {
+			checkerSnippet.insert(std::end(checkerSnippet), std::begin(currentCheckerSnippet), std::end(currentCheckerSnippet));	
+		}
+      
+    	// Insert the snippet
+		if (!app->insertSnippet(BPatch_sequence(checkerSnippet), *(basicBlock->findEntryPoint()))) {
       	  	fprintf(stderr, "insertSnippet failed\n");
       	}
       	releaseBPatchVectorContents(checkerSnippet);
-	}*/
-
-    // Finish instrumentation 
+    }
+    
+	// Finish instrumentation 
     const char* progName2 = "build/InterestingProgram-rewritten";
     finishInstrumenting(app, progName2);
     
