@@ -338,23 +338,29 @@ void finishInstrumenting(BPatch_addressSpace* app, const char* newName) {
 }
 
 Graph createCheckerNetwork(BPatch_addressSpace* app, int connectivity, std::vector<std::string> functions){
+	// Creates a checker network for all functions of an app listen in the given vector
+	// Vertices in the network are basic blocks of the functions and edges are relations checker -> basic block
 	Graph g;
 	BPatch_image *appImage = app->getImage();
 	std::vector<vertex_t> vertices;
 	for (auto name : functions){
+		// Searches in the loaded binary for all functions given as input
 		std::vector<BPatch_function *> funcs;
-		appImage->findFunction(name.c_str(), funcs);
-		for  (auto singleFunc : funcs){
-			std::set<BPatch_basicBlock *> blocks = getBasicBlocksForFunction(singleFunc);
-			for (auto singleBlock : blocks){
-				BPatch_basicBlock *block = singleBlock; 
-				vertex_t u = boost::add_vertex(g);
-				g[u].block = block;
-				vertices.push_back(u);
+		if (!appImage->findFunction(name.c_str(), funcs)){
+			for  (auto singleFunc : funcs){
+				// Splits a function in its basic blocks and adds them as vertices to the defined graph
+				std::set<BPatch_basicBlock *> blocks = getBasicBlocksForFunction(singleFunc);
+				for (auto singleBlock : blocks){
+					BPatch_basicBlock *block = singleBlock; 
+					vertex_t u = boost::add_vertex(g);
+					g[u].block = block;
+					vertices.push_back(u);
+				}
 			}
 		}
 	}
-	
+	// In this implementation, the connectivity has to be smaler then the number of available blocks
+	// Only one checker is added to each block and one checker can check all other blocks
 	if (connectivity > (int) vertices.size() - 1) {
 		cout << "WARNING" << endl;
 		cout << "The specified connectivity " << connectivity << " is larger than the number of basic blocks." << endl;
@@ -364,21 +370,23 @@ Graph createCheckerNetwork(BPatch_addressSpace* app, int connectivity, std::vect
 	connectivity = std::min((int)(vertices.size()-1), connectivity);
 	std::vector<vertex_t> verticesDest = vertices;
 	
-	for (auto blockFrom : vertices){
+	// Go though all vertices in the graph and treat every vertice as a checkee
+	for (auto checkee : vertices){
+		// connect enough other vertices as checkers to this node to fulfill the connectivity 
 		int out = 0;
 		while(out < connectivity) {
-			vertex_t blockTo;
+			vertex_t checker;
+			// checkers a chosen randomly
 			int rand_pos;
 			while(true){
 				rand_pos = rand() % verticesDest.size();
-				blockTo = verticesDest[rand_pos];
-				if (blockFrom != blockTo){
+				checker = verticesDest[rand_pos];
+				if (checkee != checker){
 					break;
 				}
 			}
-			if(boost::add_edge(blockTo, blockFrom, g).second) {
-				Graph::in_edge_iterator inI, inEnd;
-      			boost::tie(inI, inEnd) = in_edges(blockTo,g);
+			// if the edge was added increase the counter and repeat until connectivity is reached
+			if(boost::add_edge(checker, checkee, g).second) {
 				out += 1;
 			}
 		}
