@@ -65,6 +65,8 @@ BPatch_addressSpace* startInstrumenting(const char* name) {
 
 template<typename T>
 void releaseBPatchVectorContents(BPatch_Vector<T *> vector) {
+	// For every element in the vector call delete
+	// and then delete the vector itself
 	for (auto *element : vector)
       		delete element;
     
@@ -290,6 +292,8 @@ char hashFunctionSub(std::vector<char> values) {
 	return result;
 }
 
+// Check if the function contains absolute addresses which
+// are changed in every execution of the program
 bool instructionUsesAddress(Dyninst::InstructionAPI::Instruction::Ptr inst) {
 	return inst->getCategory() == Dyninst::InstructionAPI::c_CallInsn;
 }
@@ -298,6 +302,7 @@ int blockLengthUntilCall(BPatch_basicBlock *block) {
 	std::vector<Dyninst::InstructionAPI::Instruction::Ptr> insns; 
 	block->getInstructions(insns);
 	
+	// Calculate length until the first instruction with absolute address
 	int length = 0;
 	
 	for (Dyninst::InstructionAPI::Instruction::Ptr inst : insns) {
@@ -314,6 +319,7 @@ char computeHash(BPatch_basicBlock *block, char (*hashFunction)(std::vector<char
 
 	std::vector<char> instValues;
 	
+	// Get all bytes of a block in a vector
 	for (Dyninst::InstructionAPI::Instruction::Ptr inst : insns) {
 		if (instructionUsesAddress(inst)) { break; }
 		for (unsigned int i = 0; i < inst->size(); i++) {			
@@ -321,6 +327,7 @@ char computeHash(BPatch_basicBlock *block, char (*hashFunction)(std::vector<char
 		}
 	}
 	
+	// Compute the hash value for this block using the provided hash function
 	return hashFunction(instValues);
 }
 
@@ -332,6 +339,7 @@ void finishInstrumenting(BPatch_addressSpace* app, const char* newName) {
     	return;
     }
     
+    // Write binary to file
     if (!appBin->writeFile(newName)) {
 		fprintf(stderr,"writeFile failed\n");
     }
@@ -430,6 +438,7 @@ void parseArgs(int argc, char** argv) {
 		}
 	}
 	
+	// Check if all parameters are provided
 	if(progName == NULL || connectivity < 1 || functionsFileName == NULL) {
 		usage();
 	}
@@ -441,10 +450,11 @@ std::vector<std::string> parseFunctionToCheckNames() {
 		
 	std::string line;
 	while (std::getline(infile, line)) {
-		if (line == "") { continue; }
+		if (line == "") { continue; } // Skip empty lines
 		functions.push_back(line);
 	}
 	
+	// The user has to provide at least one function to protect
 	if(functions.size() == 0) {
 		usage();
 	}
@@ -464,13 +474,16 @@ int main(int argc, char* argv[]) {
         exit(1);
     }
     
+    // Get functions to protect
     std::vector<std::string> functions = parseFunctionToCheckNames();
     
+    // Generate checker network
     Graph g = createCheckerNetwork(app, connectivity, functions);
    	typedef Graph::vertex_descriptor Vertex;
    	typedef Graph::vertex_iterator vertex_iter;
     std::pair<vertex_iter, vertex_iter> vp;
     
+    // For every basic block from the graph
 	for (vp = vertices(g); vp.first != vp.second; ++vp.first) {
     	Vertex v = *vp.first;
     	BPatch_basicBlock *basicBlock = g[v].block;
@@ -480,16 +493,18 @@ int main(int argc, char* argv[]) {
 		
 		int chooseHashFunction;
 		
-		// Generate snippet
+		// Generate checker snippet to insert before basic block
 		BPatch_Vector<BPatch_snippet *> checkerSnippet; 
-
+		
+		// For every basic block which has to be protected by the current basic block
 		for (adj_vp = adjacent_vertices(v, g); adj_vp.first != adj_vp.second; ++adj_vp.first) {
 			v = *adj_vp.first;
 			BPatch_basicBlock *blockToCheck = g[v].block;
 			cout<< "\tBlock " << v << " with startAddress " << "0x"<< blockToCheck->getStartAddress() <<endl;
 
 			char correctHash = 0;
-
+			
+			// Choose a hash function randomly
 			hashFunction *hashFunctionSnippet = NULL;
 			chooseHashFunction = rand() % NUMBER_HASHFUNCTIONS;
 
@@ -508,6 +523,7 @@ int main(int argc, char* argv[]) {
 			checkerSnippet.insert(std::end(checkerSnippet), std::begin(currentCheckerSnippet), std::end(currentCheckerSnippet));	
 		}
 		
+		// Insert checkers to check the other checkers (but not cyclic)
 		if (vp.first != vp.second-1) {
 
 			hashFunction *hashFunctionSnippet = NULL;
@@ -524,14 +540,14 @@ int main(int argc, char* argv[]) {
 		  	checkerSnippet.insert(std::end(checkerSnippet), std::begin(currentCheckerCheckSnippet), std::end(currentCheckerCheckSnippet));
 		}
       	
-    	// Insert the snippet
+    	// Insert the generated snippet
 		if (!app->insertSnippet(BPatch_sequence(checkerSnippet), *(basicBlock->findEntryPoint()))) {
       	  	fprintf(stderr, "insertSnippet failed\n");
       	}
       	releaseBPatchVectorContents(checkerSnippet);
     }
 
-	// Finish instrumentation 
+	// Write the new binary to file 
     const std::string progName2 = std::string(progName) + "-rewritten";
     finishInstrumenting(app, progName2.c_str());
     
