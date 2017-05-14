@@ -394,7 +394,7 @@ Graph createCheckerNetwork(BPatch_addressSpace* app, int connectivity, std::vect
 void usage() {
 	puts("instroProtect [OPTIONS]\n" 
 		 "\t-b\tname of binary to protect\n"
-		 "\t-c\tpositive number indicating how many checkers check each basic block.\n"
+		 "\t-c\tpositive number indicating how many checkers check each basic block\n"
 		 "\t-f\tname of a file containing the names of functions to be protected (line separated)\n"
 		 "\t-v\tverbose output including a \"nice\" graph of the checker network\n");
 	exit(1);
@@ -433,6 +433,7 @@ std::vector<std::string> parseFunctionToCheckNames() {
 		
 	std::string line;
 	while (std::getline(infile, line)) {
+		if (line == "") { continue; }
 		functions.push_back(line);
 	}
 	
@@ -523,8 +524,8 @@ int main(int argc, char* argv[]) {
     }
 
 	// Finish instrumentation 
-    const char* progName2 = "build/InterestingProgram-rewritten";
-    finishInstrumenting(app, progName2);
+    const std::string progName2 = std::string(progName) + "-rewritten";
+    finishInstrumenting(app, progName2.c_str());
     
     return 0;
 }
