@@ -12,8 +12,11 @@ RUN cmake /home/dyninst -DBUILD_RTLIB_32="ON"
 RUN make
 RUN make install
 
+ENV LD_LIBRARY_PATH=/usr/local/lib/
+ENV DYNINSTAPI_RT_LIB=/usr/local/lib/libdyninstAPI_RT_m32.so
+
 WORKDIR /home/playground
 RUN git clone https://github.com/johanneszi/SIP.git
 
-ENV LD_LIBRARY_PATH=/usr/local/lib/:$LD_LIBRARY_PATH
-ENV DYNINSTAPI_RT_LIB=/usr/local/lib/libdyninstAPI_RT_m32.so
+WORKDIR /home/zhechev/Developer/SIP/phase1/dyninsttool
+RUN make
