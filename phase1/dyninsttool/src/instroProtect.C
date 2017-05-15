@@ -295,7 +295,8 @@ char hashFunctionSub(std::vector<char> values) {
 // Check if the function contains absolute addresses which
 // are changed in every execution of the program
 bool instructionUsesAddress(Dyninst::InstructionAPI::Instruction::Ptr inst) {
-	return inst->getCategory() == Dyninst::InstructionAPI::c_CallInsn;
+	return inst->getCategory() == Dyninst::InstructionAPI::c_CallInsn ||
+		inst->getCategory() == Dyninst::InstructionAPI::c_BranchInsn;
 }
 
 int blockLengthUntilCall(BPatch_basicBlock *block) {
@@ -354,8 +355,8 @@ Graph createCheckerNetwork(BPatch_addressSpace* app, int connectivity, std::vect
 	for (auto name : functions){
 		// Searches in the loaded binary for all functions given as input
 		std::vector<BPatch_function *> funcs;
-		if (!appImage->findFunction(name.c_str(), funcs)){
-			for  (auto singleFunc : funcs){
+		if (appImage->findFunction(name.c_str(), funcs) != NULL) {
+			for (auto singleFunc : funcs){
 				// Splits a function in its basic blocks and adds them as vertices to the defined graph
 				std::set<BPatch_basicBlock *> blocks = getBasicBlocksForFunction(singleFunc);
 				for (auto singleBlock : blocks){
@@ -384,7 +385,7 @@ Graph createCheckerNetwork(BPatch_addressSpace* app, int connectivity, std::vect
 		int out = 0;
 		while(out < connectivity) {
 			vertex_t checker;
-			// checkers a chosen randomly
+			// checkers are chosen randomly
 			int rand_pos;
 			while(true){
 				rand_pos = rand() % verticesDest.size();
