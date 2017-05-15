@@ -18,5 +18,5 @@ ENV DYNINSTAPI_RT_LIB=/usr/local/lib/libdyninstAPI_RT_m32.so
 WORKDIR /home/playground
 RUN git clone https://github.com/johanneszi/SIP.git
 
-WORKDIR /home/zhechev/Developer/SIP/phase1/dyninsttool
+WORKDIR /home/playground/SIP/phase1/dyninsttool
 RUN make
