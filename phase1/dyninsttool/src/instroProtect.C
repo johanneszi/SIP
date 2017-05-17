@@ -88,8 +88,8 @@ BPatch_funcCallExpr* createReportFunctionSnippet(BPatch_addressSpace* app) {
 	// Find the printf function
     std::vector<BPatch_function*> printfFuncs;
     
-    //TODO: Fix Dyninst library and actually insert printf
-    appImage->findFunction("print", printfFuncs);
+    // Serach for printf
+    appImage->findFunction("printf", printfFuncs);
     
     if (printfFuncs.size() == 0) {
         fprintf(stderr, "Could not find printf\n");

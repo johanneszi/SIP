@@ -20,7 +20,7 @@ DYNINST_INCLUDE = $(DYNINST_ROOT)/include
 DYNINST_LIB = $(DYNINST_ROOT)/lib
 
 CC = gcc
-CCFLAGS = -g -Wall -m32
+CCFLAGS = -g -Wall
 
 CXX = g++
 CXXFLAGS = -g -Wall -std=c++11
@@ -45,8 +45,7 @@ DYNINST_LIBS = -L$(DYNINST_LIB) \
 
 $(BUILD)InterestingProgram: $(SOURCE)InterestingProgram.c
 	$(CC) $(CCFLAGS) -o $@ $^
-
-
+	
 $(BUILD)instroProtect: $(BUILD)instroProtect.o
 	$(CXX) $(CXXFLAGS) -o $@ $^ -I$(DYNINST_INCLUDE) $(DYNINST_LIBS) 
 
