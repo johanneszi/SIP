@@ -27,7 +27,7 @@ using namespace std;
 using namespace Dyninst;
 
 typedef BPatch_Vector<BPatch_snippet *> (hashFunction) (BPatch_addressSpace*, BPatch_variableExpr*,
-													unsigned long, long, char);
+													unsigned long, unsigned long, unsigned long);
 													
 hashFunction createHashFunctionAddSnippet;
 hashFunction createHashFunctionSubSnippet;
@@ -106,17 +106,20 @@ BPatch_funcCallExpr* createReportFunctionSnippet(BPatch_addressSpace* app) {
 }
 
 BPatch_Vector<BPatch_snippet *> createHashFunctionSubSnippet(BPatch_addressSpace* app, BPatch_variableExpr* result,
-													unsigned long startAddress, long blockSize,
-													char hashStartValue) {
+													unsigned long startAddress, unsigned long blockSize,
+													unsigned long hashStartValue) {
 	
 	BPatch_image* appImage = app->getImage();
 	BPatch_Vector<BPatch_snippet *> hashFunctionSnippet;
 	
 	BPatch_variableExpr* counter = 
         app->malloc(*(appImage->findType("unsigned long")), "counter");
+        
+    BPatch_variableExpr* currentByte = 
+        app->malloc(*(appImage->findType("unsigned char")), "currentByte");
     
     BPatch_variableExpr* size = 
-        app->malloc(*(appImage->findType("long")), "size");
+        app->malloc(*(appImage->findType("unsigned long")), "size");
     
     // couter = startAddress 
     BPatch_arithExpr *assignCounter = new BPatch_arithExpr(BPatch_assign,
@@ -129,15 +132,22 @@ BPatch_Vector<BPatch_snippet *> createHashFunctionSubSnippet(BPatch_addressSpace
     // size = size									
     BPatch_arithExpr *assignSize = new BPatch_arithExpr (BPatch_assign,
     									*size, BPatch_constExpr(blockSize));
+    
+    // currentByte = 0									
+    BPatch_arithExpr *assignCurrentByte = new BPatch_arithExpr (BPatch_assign,
+    									*currentByte, BPatch_constExpr(0));
     									
    	hashFunctionSnippet.push_back(assignResult);
    	hashFunctionSnippet.push_back(assignCounter);
    	hashFunctionSnippet.push_back(assignSize);
+   	hashFunctionSnippet.push_back(assignCurrentByte);
    	
    	BPatch_Vector<BPatch_snippet *> whileBody;
 	
+	BPatch_arithExpr *getCurrentByte = new BPatch_arithExpr(BPatch_assign, *currentByte, BPatch_arithExpr(BPatch_deref, *counter));
+	
 	// result + currentByte
-	BPatch_arithExpr *addByte = new BPatch_arithExpr(BPatch_minus, *result, BPatch_arithExpr(BPatch_deref, *counter));
+	BPatch_arithExpr *addByte = new BPatch_arithExpr(BPatch_minus, *result, *currentByte);
 	
 	// result = result + currentByte
   	BPatch_arithExpr *hash = new BPatch_arithExpr(BPatch_assign, *result, *addByte);
@@ -155,12 +165,13 @@ BPatch_Vector<BPatch_snippet *> createHashFunctionSubSnippet(BPatch_addressSpace
   	BPatch_arithExpr *sizeMinusMinus = new BPatch_arithExpr(BPatch_assign, *size, *sizeMinus);
   	
   	// Add the created instructions to whileBody
+  	whileBody.push_back(getCurrentByte);
   	whileBody.push_back(hash);
   	whileBody.push_back(count);
   	whileBody.push_back(sizeMinusMinus);
    
    	// counter < endAddress
-   	BPatch_boolExpr *counterLEndAddress = new BPatch_boolExpr(BPatch_gt, *size, BPatch_constExpr((long)0));
+   	BPatch_boolExpr *counterLEndAddress = new BPatch_boolExpr(BPatch_gt, *size, BPatch_constExpr((unsigned long)0));
    	
    	// while(counter < endAddress) { whileBody }
    	BPatch_whileExpr *whileHash = new BPatch_whileExpr(*counterLEndAddress, BPatch_sequence(whileBody));
@@ -171,17 +182,20 @@ BPatch_Vector<BPatch_snippet *> createHashFunctionSubSnippet(BPatch_addressSpace
 }
 
 BPatch_Vector<BPatch_snippet *> createHashFunctionAddSnippet(BPatch_addressSpace* app, BPatch_variableExpr* result,
-													unsigned long startAddress, long blockSize,
-													char hashStartValue) {
+													unsigned long startAddress, unsigned long blockSize,
+													unsigned long hashStartValue) {
 	
 	BPatch_image* appImage = app->getImage();
 	BPatch_Vector<BPatch_snippet *> hashFunctionSnippet;
 	
 	BPatch_variableExpr* counter = 
         app->malloc(*(appImage->findType("unsigned long")), "counter");
+        
+    BPatch_variableExpr* currentByte = 
+        app->malloc(*(appImage->findType("unsigned char")), "currentByte");
     
     BPatch_variableExpr* size = 
-        app->malloc(*(appImage->findType("long")), "size");
+        app->malloc(*(appImage->findType("unsigned long")), "size");
     
     // couter = startAddress 
     BPatch_arithExpr *assignCounter = new BPatch_arithExpr(BPatch_assign,
@@ -194,15 +208,22 @@ BPatch_Vector<BPatch_snippet *> createHashFunctionAddSnippet(BPatch_addressSpace
     // size = size									
     BPatch_arithExpr *assignSize = new BPatch_arithExpr (BPatch_assign,
     									*size, BPatch_constExpr(blockSize));
+    
+    // currentByte = 0									
+    BPatch_arithExpr *assignCurrentByte = new BPatch_arithExpr (BPatch_assign,
+    									*currentByte, BPatch_constExpr(0));
     									
    	hashFunctionSnippet.push_back(assignResult);
    	hashFunctionSnippet.push_back(assignCounter);
    	hashFunctionSnippet.push_back(assignSize);
+   	hashFunctionSnippet.push_back(assignCurrentByte);
    	
    	BPatch_Vector<BPatch_snippet *> whileBody;
 	
+	BPatch_arithExpr *getCurrentByte = new BPatch_arithExpr(BPatch_assign, *currentByte, BPatch_arithExpr(BPatch_deref, *counter));
+	
 	// result + currentByte
-	BPatch_arithExpr *addByte = new BPatch_arithExpr(BPatch_plus, *result, BPatch_arithExpr(BPatch_deref, *counter));
+	BPatch_arithExpr *addByte = new BPatch_arithExpr(BPatch_plus, *result, *currentByte);
 	
 	// result = result + currentByte
   	BPatch_arithExpr *hash = new BPatch_arithExpr(BPatch_assign, *result, *addByte);
@@ -220,12 +241,13 @@ BPatch_Vector<BPatch_snippet *> createHashFunctionAddSnippet(BPatch_addressSpace
   	BPatch_arithExpr *sizeMinusMinus = new BPatch_arithExpr(BPatch_assign, *size, *sizeMinus);
   	
   	// Add the created instructions to whileBody
+  	whileBody.push_back(getCurrentByte);
   	whileBody.push_back(hash);
   	whileBody.push_back(count);
   	whileBody.push_back(sizeMinusMinus);
    
    	// counter < endAddress
-   	BPatch_boolExpr *counterLEndAddress = new BPatch_boolExpr(BPatch_gt, *size, BPatch_constExpr((long)0));
+   	BPatch_boolExpr *counterLEndAddress = new BPatch_boolExpr(BPatch_gt, *size, BPatch_constExpr((unsigned long)0));
    	
    	// while(counter < endAddress) { whileBody }
    	BPatch_whileExpr *whileHash = new BPatch_whileExpr(*counterLEndAddress, BPatch_sequence(whileBody));
@@ -235,23 +257,23 @@ BPatch_Vector<BPatch_snippet *> createHashFunctionAddSnippet(BPatch_addressSpace
    	return hashFunctionSnippet;
 }
 
-BPatch_Vector<BPatch_snippet *> createCheckerSnippet(BPatch_addressSpace* app, char correctHash, 
+BPatch_Vector<BPatch_snippet *> createCheckerSnippet(BPatch_addressSpace* app, unsigned long correctHash, 
 													unsigned long startAddress, unsigned long size,
-													hashFunction *snippetHashFunction, char hashStartValue = 0) {
+													hashFunction *snippetHashFunction, unsigned long hashStartValue = 0) {
 	BPatch_image* appImage = app->getImage();
 	
 	// Holds all created snippets
 	BPatch_Vector<BPatch_snippet *> checkerSnippet;
     
     BPatch_variableExpr* result = 
-        app->malloc(*(appImage->findType("char")), "result");
+        app->malloc(*(appImage->findType("unsigned long")), "result");
         	
     BPatch_variableExpr* correctHashConst = 
-        app->malloc(*(appImage->findType("char")), "correctHashConst");
+        app->malloc(*(appImage->findType("unsigned long")), "correctHashConst");
     						
     // correctHashConst = 0									
     BPatch_arithExpr *assignCorrectHashConst = new BPatch_arithExpr (BPatch_assign,
-   										*correctHashConst, BPatch_constExpr((unsigned int)correctHash));
+   										*correctHashConst, BPatch_constExpr(correctHash));
    										
    	checkerSnippet.push_back(assignCorrectHashConst);
   	
@@ -276,16 +298,16 @@ BPatch_Vector<BPatch_snippet *> createCheckerSnippet(BPatch_addressSpace* app, c
  	return checkerSnippet;
 }
 
-char hashFunctionAdd(std::vector<char> values) {
-	char result = 0;
+unsigned long hashFunctionAdd(std::vector<unsigned long> values, unsigned long startValue) {
+	unsigned long result = startValue;
 	for(auto value : values) 
 		result += value;
 	
 	return result;
 }
 
-char hashFunctionSub(std::vector<char> values) {
-	char result = 0;
+unsigned long hashFunctionSub(std::vector<unsigned long> values, unsigned long startValue) {
+	unsigned long result = startValue;
 	for(auto value : values) 
 		result -=  value;
 	
@@ -314,11 +336,12 @@ int blockLengthUntilCall(BPatch_basicBlock *block) {
 	return length;
 }
 
-char computeHash(BPatch_basicBlock *block, char (*hashFunction)(std::vector<char>)) {
+unsigned long computeHash(BPatch_basicBlock *block, unsigned long (*hashFunction)(std::vector<unsigned long>, unsigned long),
+							unsigned long startValue = 0) {
 	std::vector<Dyninst::InstructionAPI::Instruction::Ptr> insns; 
 	block->getInstructions(insns);
 
-	std::vector<char> instValues;
+	std::vector<unsigned long> instValues;
 	
 	// Get all bytes of a block in a vector
 	for (Dyninst::InstructionAPI::Instruction::Ptr inst : insns) {
@@ -329,7 +352,7 @@ char computeHash(BPatch_basicBlock *block, char (*hashFunction)(std::vector<char
 	}
 	
 	// Compute the hash value for this block using the provided hash function
-	return hashFunction(instValues);
+	return hashFunction(instValues, startValue);
 }
 
 void finishInstrumenting(BPatch_addressSpace* app, const char* newName) {
@@ -503,7 +526,7 @@ int main(int argc, char* argv[]) {
 			BPatch_basicBlock *blockToCheck = g[v].block;
 			cout<< "\tBlock " << v << " with startAddress " << "0x"<< blockToCheck->getStartAddress() <<endl;
 
-			char correctHash = 0;
+			unsigned long correctHash = 0;
 			
 			// Choose a hash function randomly
 			hashFunction *hashFunctionSnippet = NULL;
