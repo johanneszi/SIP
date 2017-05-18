@@ -1,5 +1,6 @@
-FROM ubuntu:16.04
+FROM ubuntu
 
+# Add dependencies
 RUN echo "deb http://apt.llvm.org/trusty/ llvm-toolchain-trusty-3.9 main\ndeb-src http://apt.llvm.org/trusty/ llvm-toolchain-trusty-3.9 main\ndeb http://cz.archive.ubuntu.com/ubuntu trusty main universe" >> /etc/apt/sources.list
 
 RUN apt-get update 
@@ -9,6 +10,7 @@ RUN apt-get -y --allow-unauthenticated install clang-3.9 clang-3.9-doc libclang-
 
 RUN apt-get -y install cmake build-essential git vim
 
+# Setup project
 WORKDIR /home/playground
 RUN git clone https://github.com/johanneszi/SIP.git
 
