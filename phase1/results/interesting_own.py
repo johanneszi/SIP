@@ -1,7 +1,7 @@
 import r2pipe
 import sys
 
-r2 = r2pipe.open('InterestingProgram-rewritten', ['w', 'A'])
+r2 = r2pipe.open('./InterestingProgram-rewritten', ['w', 'A'])
 
 def seek(addr):
 	r2.cmd('s '+ str(addr))
@@ -72,7 +72,7 @@ def patchReport(address):
 
 if __name__ == "__main__":
 	dyninstMain = int(r2.cmd('?v sym.main_dyninst'), 16)
-	
+
 	if dyninstMain == 0x0:
 		print("Open something rewritten with dyninst!")
 		exit(1)
