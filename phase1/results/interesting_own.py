@@ -71,16 +71,23 @@ def patchReport(address):
 	r2.cmd('wx 0xe9')
 
 if __name__ == "__main__":
+	dyninstInst = int(r2.cmd('?v sym.InterestingProcedure_dyninst'), 16)
 	dyninstMain = int(r2.cmd('?v sym.main_dyninst'), 16)
+	startAddress = 0x0
 
-	if dyninstMain == 0x0:
+	if dyninstMain != 0x0:
+		startAddress = dyninstMain
+	elif dyninstInst != 0x0:
+		startAddress = dyninstInst
+	else:
 		print("Open something rewritten with dyninst!")
 		exit(1)
-	
+
 	r2.cmd('oo+')
-	
-	for reportAddr in findReport(dyninstMain):
+
+	for reportAddr in findReport(startAddress):
 		patchReport(reportAddr)
-		
+
 	r2.quit()
+
 	
