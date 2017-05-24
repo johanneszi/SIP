@@ -21,13 +21,14 @@ RUN apt-get update && apt-get -y install \
 	cmake \
 	build-essential \
 	git \
-	vim
+	vim \
+ && rm -rf /var/lib/apt/lists/*
 
 # Setup project
 WORKDIR /home/playground
 RUN git clone https://github.com/johanneszi/SIP.git
 
 WORKDIR /home/playground/SIP/phase2/llvm-pass-skeleton/build
-RUN cmake ..
-RUN make
+RUN cmake .. \
+ && make
  
