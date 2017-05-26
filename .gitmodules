@@ -1,0 +1,3 @@
+[submodule "phase2/merkle-tree"]
+	path = phase2/merkle-tree
+	url = https://github.com/IAIK/merkle-tree.git
