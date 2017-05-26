@@ -49,20 +49,15 @@ namespace {
 		boolTy = Type::getInt1Ty(M.getContext());
 		voidTy = Type::getVoidTy(M.getContext());
     	
-    	FunctionType *fty = FunctionType::get(voidTy, false) ;
-    	Type *args_types[1] ;
+		Type *args_types[2];
 		//args_types[0] = ptrTy; //Type::getInt8PtrTy(*ctx) ;	
+		args_types[0] = intTy;
+		args_types[1] = boolTy;
 		
-		LLVMContext& llvmContext = M.getContext();
-		StructType *structTy_class_std_vector = M.getTypeByName("class.std::vector");
-		if (!structTy_class_std_vector) {
-     		structTy_class_std_vector = StructType::create(llvmContext, "class.std::vector");
-		}
-		
-		args_types[0] = structTy_class_std_vector;
+		//args_types[0] = structTy_class_std_vector;
 		
     	p_check = M.getOrInsertFunction(CHECKFUNC, 
-					FunctionType::get(voidTy, ArrayRef<Type *>(args_types), false)) ;
+					FunctionType::get(boolTy, ArrayRef<Type *>(args_types), false)) ;
 					
 		return true;
     }
@@ -83,8 +78,28 @@ namespace {
 	    }
 	  	
 	  	getCallGraphForFunction(CG, "InterestingProcedure");
-      	
-      	return false;		
+      	/* Add a function call to check at the beginning of function*/
+    	Function * func = M.getFunction(StringRef("InterestingProcedure"));
+		if (func != nullptr && func->size() > 0) {
+			Instruction *firstInst = &*(func->getEntryBlock().getFirstInsertionPt());
+			IRBuilder<> builder(firstInst);
+			
+			Value *start = builder.getInt1(false);
+			std::vector<Value *> args;
+			args.push_back(builder.getInt32(42));
+			args.push_back(start);
+			
+			Value *function = builder.CreateCall(p_check, args) ;
+			int i = 3;
+			for(i; i>0; i--){
+				std::vector<Value *> args;
+				args.push_back(builder.getInt32(40));
+				args.push_back(function);
+				function = builder.CreateCall(p_check, args) ;
+			}
+		}
+		
+      	return true;		
     }
     
     std::vector<std::vector<std::string> > getCall(CallGraph *CG, StringRef func, std::vector<std::string> seen) {
@@ -136,22 +151,28 @@ namespace {
     }
     
     virtual bool doFinalization(Module &M) {
-    	/* Add a function call to check at the beginning of function*/
-    	Function * func = M.getFunction(StringRef("InterestingProcedure"));
-		if (func != nullptr && func->size() > 0) {
-			Instruction *firstInst = &*(func->getEntryBlock().getFirstInsertionPt());
-			IRBuilder<> builder(firstInst);
-			
-			ConstantInt* args = builder.getInt64(42);
-			builder.CreateCall(p_check, args) ;
-		}
-		
+    	
 		return true;
 	}
   };
 }
 
 char SkeletonPass::ID = 0;
+/*
+static void registerSkeletonPass(const PassManagerBuilder &,
+                           PassManagerBase &PM) {
+    PM.add(new SkeletonPass());
+}
+static RegisterStandardPasses
+    RegisterMyPass(PassManagerBuilder::EP_EnableOnOptLevel0,
+                   registerSkeletonPass);
+
+
+*/
 
 RegisterPass<SkeletonPass> X("skeleton", "Skeleton Pass", false, false);
-         
+/*
+static RegisterStandardPasses
+    RegisterPass(PassManagerBuilder::EP_EnableOnOptLevel0,
+                   registerPass);
+         */

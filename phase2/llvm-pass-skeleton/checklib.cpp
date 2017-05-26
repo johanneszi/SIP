@@ -4,7 +4,7 @@
 #include <cstdarg>
 #include <execinfo.h>
 
-#include "merkletree.h"
+//#include "merkletree.h"
 
 #define STACKTRACE 256
 
@@ -39,7 +39,7 @@ std::vector<std::string> stackTrace() {
   	
 	return trace;
 } 
-
+/*
 uint8_t* calculateCallHash(std::vector<std::string> trace) {
  	// Hash backtrace
  	mt_t *mt = mt_create();
@@ -58,27 +58,20 @@ uint8_t* calculateCallHash(std::vector<std::string> trace) {
  	mt_delete(mt);
  	
 	return hash;
-}
+}*/
 
-extern "C" void check(std::vector<char*> validHash) {
-  
+extern "C" bool check(int validHash, bool hastocheck) {
+  	std::cout<<validHash << hastocheck << "\n";
 	// Get current stack trace
-	std::vector<std::string> currentTrace = stackTrace();
-	for (int i = 0; i < currentTrace.size(); i++) {
-		std::cout<<currentTrace[i]<<"\n";
-	}
-	
-	std::cout << validHash.size(); 
-
-	
-	/*
-	// Calculate current call hash
-	uint8_t* callHash = calculateCallHash(currentTrace);
-	for (int i = 0; i < HASH_LENGTH; i++) {
-		if (validHash[i] != callHash[i]) {
-			std::cout<<"Hash corrupted!\n";
-			break;
+	if (!hastocheck){
+		std::vector<std::string> currentTrace = stackTrace();
+		for (int i = 0; i < currentTrace.size(); i++) {
+			std::cout<<currentTrace[i]<<"\n";
 		}
-	}*/
+		return false;
+	}
+	else {
+		return true;
+	}
 }
 

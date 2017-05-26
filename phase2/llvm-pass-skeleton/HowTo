@@ -1,0 +1,9 @@
+opt -load skeleton/libSkeleton.so -skeleton <build/InterestingProgram.bc> build/InterestingProgram_inst.bc
+
+llc -filetype=obj build/InterestingProgram_inst.bc
+
+g++ -g -c -rdynamic -std=c++11 checklib.cpp
+
+g++ -rdynamic build/InterestingProgram_inst.o checklib.o
+
+
