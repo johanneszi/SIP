@@ -1,7 +1,10 @@
 #include <vector>
 #include <string>
-#include <execinfo.h>
 #include <iostream>
+#include <cstdarg>
+#include <execinfo.h>
+
+#include "merkletree.h"
 
 #define STACKTRACE 256
 
@@ -37,12 +40,27 @@ std::vector<std::string> stackTrace() {
 	return trace;
 } 
 
-unsigned long calculateCallHash(std::vector<std::string>) {
+uint8_t* calculateCallHash(std::vector<std::string> trace) {
  	// Hash backtrace
-	return 42;
+ 	mt_t *mt = mt_create();
+ 	
+ 	for (int i = 0; i < trace.size(); i++) {
+ 		std::string frame = trace[i];
+ 		size_t length = frame.length();
+ 		uint8_t *frameToHash = (uint8_t *) frame.c_str();
+ 		
+ 		mt_add(mt, frameToHash, length);
+ 	}
+ 	
+ 	uint8_t *hash = new uint8_t[HASH_LENGTH]; 
+ 	mt_get_root(mt, hash);
+ 	
+ 	mt_delete(mt);
+ 	
+	return hash;
 }
 
-void check(unsigned long validHash) {
+extern "C" void check(std::vector<char*> validHash) {
   
 	// Get current stack trace
 	std::vector<std::string> currentTrace = stackTrace();
@@ -50,11 +68,17 @@ void check(unsigned long validHash) {
 		std::cout<<currentTrace[i]<<"\n";
 	}
 	
-	// Calculate current call hash
-	unsigned long callHash = calculateCallHash(currentTrace);
+	std::cout << validHash.size(); 
+
 	
-	if (validHash != callHash) {
-		std::cout<<"Hash corrupted!\n";
-	}
+	/*
+	// Calculate current call hash
+	uint8_t* callHash = calculateCallHash(currentTrace);
+	for (int i = 0; i < HASH_LENGTH; i++) {
+		if (validHash[i] != callHash[i]) {
+			std::cout<<"Hash corrupted!\n";
+			break;
+		}
+	}*/
 }
 
