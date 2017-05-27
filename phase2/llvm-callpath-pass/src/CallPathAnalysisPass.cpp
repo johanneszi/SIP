@@ -11,8 +11,12 @@
 #include <string>
 #include <map>
 #include <algorithm>
+#include <openssl/sha.h>
+#include <sstream>
+#include <iomanip>
 
 using namespace llvm;
+using namespace std;
 
 namespace {
 	const std::string CHECKFUNC = "check";
@@ -37,8 +41,27 @@ namespace {
 		bool runOnModule(Module &M) override;
 		VecInVec getCall(CallGraph *CG, StringRef func, std::vector<std::string> seen);
 		VecInVec getCallGraphForFunction(CallGraph *CG, StringRef func);
+		void insertProtect(Function *func, VecInVec paths);
 		void dump(VecInVec callGraph);
     };
+    
+    std::string sha256(std::vector<std::string> input) {
+		unsigned char hash[SHA256_DIGEST_LENGTH];
+		SHA256_CTX sha256;
+		SHA256_Init(&sha256);
+		
+		for (auto function : input) {
+			SHA256_Update(&sha256, function.c_str(), function.size());
+		}
+		
+		SHA256_Final(hash, &sha256);
+		stringstream ss;
+		for(int i = 0; i < SHA256_DIGEST_LENGTH; i++) {
+		    ss << hex << setw(2) << setfill('0') << (int)hash[i];
+    	}
+    
+    	return ss.str();
+	}
     
 	bool CallPathAnalysisPass::doInitialization(Module &M) {
 	/* check if there is a function in a target program that conflicts
@@ -56,8 +79,7 @@ namespace {
 		voidTy = Type::getVoidTy(M.getContext());
 		
 		Type *args_types[2];
-		//args_types[0] = ptrTy; //Type::getInt8PtrTy(*ctx);	
-		args_types[0] = intTy;
+		args_types[0] = ptrTy; //Type::getInt8PtrTy(*ctx);	
 		args_types[1] = boolTy;
 	
 		//args_types[0] = structTy_class_std_vector;
@@ -85,42 +107,54 @@ namespace {
 	  	
 	  	// Traverse all functions which have to be protected
 	  	for (auto funcCallPath : CallPaths) {	
-	  		std::string func = funcCallPath.first;
-	  		if (M.getFunction(func) == nullptr) {
-	  			errs() << "WARNING: " << func << " not found and will be skipped!\n";
+	  		std::string funcName = funcCallPath.first;
+	  		Function *func = M.getFunction(funcName);
+	  		if (func == nullptr || func->size() <= 0) {
+	  			errs() << "WARNING: " << funcName << " not found and will be skipped!\n";
 	  			continue;
 	  		}
 	  		
-	  		VecInVec funcCallPaths = getCallGraphForFunction(CG, func);
-	  		CallPaths[func] = funcCallPaths;
+	  		VecInVec funcCallPaths = getCallGraphForFunction(CG, funcName);
+	  		
+	  		if (funcCallPaths.size() > 0) { 
+	  			errs() << "Inserting in function " << funcName << " with call paths:\n";
+	  			dump(funcCallPaths);
+	  			insertProtect(func, funcCallPaths);
+	  		} else {
+	  			errs() << "WARNING: Function " << funcName << " is never called\n";
+	  		}
 	  	}
 	  	
-	  	
-	 	dump(CallPaths["InterestingProcedure"]);
-		
-		
-		// Add a function call to check at the beginning of function
-		Function * func = M.getFunction(StringRef("InterestingProcedure"));
-		if (func != nullptr && func->size() > 0) {
-			Instruction *firstInst = &*(func->getEntryBlock().getFirstInsertionPt());
-			IRBuilder<> builder(firstInst);
-		
-			Value *start = builder.getInt1(false);
-			std::vector<Value *> args;
-			args.push_back(builder.getInt32(42));
-			args.push_back(start);
-		
-			Value *function = builder.CreateCall(p_check, args) ;
-			int i = 3;
-			for(; i>0; i--){
-				std::vector<Value *> args;
-				args.push_back(builder.getInt32(40));
-				args.push_back(function);
-				function = builder.CreateCall(p_check, args) ;
-			}
-		}
-	
 	  	return true;		
+	  }
+	  	
+	 	
+		
+	void CallPathAnalysisPass::insertProtect(Function *func, VecInVec paths) {
+		Instruction *firstInst = &*(func->getEntryBlock().getFirstInsertionPt());
+		IRBuilder<> builder(firstInst);
+		
+		std::string hash = sha256(paths[0]);
+		Value *strPtr = builder.CreateGlobalStringPtr(hash);
+		
+		Value *start = builder.getInt1(false);
+		std::vector<Value *> args;
+		args.push_back(strPtr);
+		args.push_back(start);
+		
+		Value *function = builder.CreateCall(p_check, args);
+		
+		
+		for (unsigned int i = 1; i < paths.size(); i++) {
+			args.clear();
+			hash = sha256(paths[i]);
+			strPtr = builder.CreateGlobalStringPtr(hash);
+			
+			args.push_back(strPtr);
+			args.push_back(function);
+			function = builder.CreateCall(p_check, args);
+		}
+		
 	}
 	
 	VecInVec CallPathAnalysisPass::getCall(CallGraph *CG, StringRef func, std::vector<std::string> seen) {

@@ -1,8 +1,13 @@
 #include <vector>
 #include <string>
+#include <cstring>
 #include <iostream>
 #include <cstdarg>
 #include <execinfo.h>
+
+#include <openssl/sha.h>
+#include <sstream>
+#include <iomanip>
 
 //#include "merkletree.h"
 
@@ -39,36 +44,40 @@ std::vector<std::string> stackTrace() {
   	
 	return trace;
 } 
-/*
-uint8_t* calculateCallHash(std::vector<std::string> trace) {
- 	// Hash backtrace
- 	mt_t *mt = mt_create();
- 	
- 	for (int i = 0; i < trace.size(); i++) {
- 		std::string frame = trace[i];
- 		size_t length = frame.length();
- 		uint8_t *frameToHash = (uint8_t *) frame.c_str();
- 		
- 		mt_add(mt, frameToHash, length);
- 	}
- 	
- 	uint8_t *hash = new uint8_t[HASH_LENGTH]; 
- 	mt_get_root(mt, hash);
- 	
- 	mt_delete(mt);
- 	
-	return hash;
-}*/
 
-extern "C" bool check(int validHash, bool hastocheck) {
-  	std::cout<<validHash << hastocheck << "\n";
+std::string sha256(std::vector<std::string> input) {
+		unsigned char hash[SHA256_DIGEST_LENGTH];
+		SHA256_CTX sha256;
+		SHA256_Init(&sha256);
+		
+		for (auto function : input) {
+			SHA256_Update(&sha256, function.c_str(), function.size());
+		}
+		
+		SHA256_Final(hash, &sha256);
+		std::stringstream ss;
+		for(int i = 0; i < SHA256_DIGEST_LENGTH; i++) {
+		    ss << std::hex << std::setw(2) << std::setfill('0') << (int)hash[i];
+    	}
+    
+    	return ss.str();
+}
+
+extern "C" bool check(char* validHash, bool hastocheck) {
+	std::string s(validHash);
+  	std::cout<< s << "\n";
+  	
 	// Get current stack trace
 	if (!hastocheck){
 		std::vector<std::string> currentTrace = stackTrace();
-		for (int i = 0; i < currentTrace.size(); i++) {
-			std::cout<<currentTrace[i]<<"\n";
+		std::string hash = sha256(currentTrace);
+		
+		if(!std::memcmp(validHash, hash.c_str(), SHA256_DIGEST_LENGTH)) {
+			std::cout<< "FALSE" <<std::endl;
+			return false;
 		}
-		return false;
+		std::cout<< "TRUE" <<std::endl;
+		return true;
 	}
 	else {
 		return true;
