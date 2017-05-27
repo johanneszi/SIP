@@ -5,6 +5,7 @@
 #include "llvm/IR/Instruction.h"
 #include "llvm/IR/IRBuilder.h"
 
+#include "llvm/Support/CommandLine.h"
 #include "llvm/Analysis/CallGraph.h"
 #include "llvm/Support/raw_ostream.h"
 
@@ -13,26 +14,25 @@
 #include <algorithm>
 #include <openssl/sha.h>
 #include <sstream>
+#include <fstream>
 #include <iomanip>
 
 using namespace llvm;
-using namespace std;
 
 namespace {
-	const std::string CHECKFUNC = "check";
+	const cl::opt<std::string> FileName("ff", cl::desc("File containing new line separated functions to protect."));
+	const std::string CHECKFUNC = "check" , REPORTFUNC = "report";
 	const std::vector<std::string> ENTRYPOINTS = {"main"};
 	
 	typedef std::vector<std::vector<std::string> > VecInVec;
 	
 	struct CallPathAnalysisPass : public ModulePass {
 		static char ID;
-		Constant * p_check ;
+		Constant *p_check, *p_report;
 		
 		Type *intTy, *ptrTy, *voidTy, *boolTy ; // These variables are to store the type instances for primitive types.
 		
-		//TODO: Init this with funcs from file
-		//TODO: Find some way to not init with empty vector
-		std::map<std::string, VecInVec> CallPaths = {{"InterestingProcedure", VecInVec()} };
+		std::vector<std::string> functionsToProtect;
 		
 		CallPathAnalysisPass() : ModulePass(ID) {}
 		
@@ -43,7 +43,27 @@ namespace {
 		VecInVec getCallGraphForFunction(CallGraph *CG, StringRef func);
 		void insertProtect(Function *func, VecInVec paths);
 		void dump(VecInVec callGraph);
+		
+		
     };
+    
+    std::vector<std::string> parseFunctionToCheckNames() {
+		std::vector<std::string> functions;
+		std::ifstream infile(FileName);
+		
+		std::string line;
+		while (std::getline(infile, line)) {
+			if (line == "") { continue; } // Skip empty lines
+			functions.push_back(line);
+		}
+	
+		// The user has to provide at least one function to protect
+		if(functions.size() == 0) {
+			//usage();
+		}
+			
+		return functions;
+	}
     
     std::string sha256(std::vector<std::string> input) {
 		unsigned char hash[SHA256_DIGEST_LENGTH];
@@ -55,9 +75,9 @@ namespace {
 		}
 		
 		SHA256_Final(hash, &sha256);
-		stringstream ss;
+		std::stringstream ss;
 		for(int i = 0; i < SHA256_DIGEST_LENGTH; i++) {
-		    ss << hex << setw(2) << setfill('0') << (int)hash[i];
+		    ss << std::hex << std::setw(2) << std::setfill('0') << (int)hash[i];
     	}
     
     	return ss.str();
@@ -69,8 +89,13 @@ namespace {
 		if (M.getFunction(StringRef(CHECKFUNC)) != nullptr) {
 			errs() << "ERROR: Function " << CHECKFUNC << " already exists.\n";
 			exit(1);
+		} else if (M.getFunction(StringRef(REPORTFUNC)) != nullptr) {
+			errs() << "ERROR: Function " << REPORTFUNC << " already exists.\n";
+			exit(1);
 		}
 
+		functionsToProtect = parseFunctionToCheckNames();
+		
 		/* store the type instances for primitive types */
 		intTy = Type::getInt32Ty(M.getContext());
 		ptrTy = Type::getInt8PtrTy(M.getContext());
@@ -82,10 +107,11 @@ namespace {
 		args_types[0] = ptrTy; //Type::getInt8PtrTy(*ctx);	
 		args_types[1] = boolTy;
 	
-		//args_types[0] = structTy_class_std_vector;
-	
 		p_check = M.getOrInsertFunction(CHECKFUNC, 
-					FunctionType::get(boolTy, ArrayRef<Type *>(args_types), false)) ;
+					FunctionType::get(boolTy, ArrayRef<Type *>(args_types), false));
+		
+		p_report = M.getOrInsertFunction(REPORTFUNC, 
+					FunctionType::get(voidTy, boolTy, false)) ;
 				
 		return true;
 	}
@@ -106,9 +132,9 @@ namespace {
 		}
 	  	
 	  	// Traverse all functions which have to be protected
-	  	for (auto funcCallPath : CallPaths) {	
-	  		std::string funcName = funcCallPath.first;
+	  	for (auto funcName : functionsToProtect) {	
 	  		Function *func = M.getFunction(funcName);
+	  		
 	  		if (func == nullptr || func->size() <= 0) {
 	  			errs() << "WARNING: " << funcName << " not found and will be skipped!\n";
 	  			continue;
@@ -155,6 +181,7 @@ namespace {
 			function = builder.CreateCall(p_check, args);
 		}
 		
+		builder.CreateCall(p_report, function);
 	}
 	
 	VecInVec CallPathAnalysisPass::getCall(CallGraph *CG, StringRef func, std::vector<std::string> seen) {

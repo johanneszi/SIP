@@ -5,8 +5,8 @@ BUILD = build/
 
 CXX = g++
 
-CXXFLAGS = -g -rdynamic -L/usr/lib/x86_64-linux-gnu/ -lssl -lcrypto
-CXXFLAGS_LLVM = -fno-rtti -lssl -lcrypto -O3 $(LLVM_INCLUDES)
+CXXFLAGS = -g -rdynamic
+CXXFLAGS_LLVM = -fno-rtti -O3 $(LLVM_INCLUDES)
 
 LLVM_CONFIG_COMMAND = \
 		`/usr/bin/llvm-config --cxxflags --libs` \

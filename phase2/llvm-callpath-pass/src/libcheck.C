@@ -1,17 +1,20 @@
 #include <vector>
+#include <algorithm>
 #include <string>
 #include <cstring>
 #include <iostream>
-#include <cstdarg>
 #include <execinfo.h>
 
 #include <openssl/sha.h>
 #include <sstream>
 #include <iomanip>
 
-//#include "merkletree.h"
-
 #define STACKTRACE 256
+
+extern "C" void report(bool valid) {
+	if (!valid)
+		std::cout << "Hash corrupted!" << std::endl; 
+}
 
 // Calculate backtrace
 std::vector<std::string> stackTrace() {
@@ -40,7 +43,12 @@ std::vector<std::string> stackTrace() {
   		std::string funcName(begin);
   		
   		trace.push_back(funcName);
+  		if (funcName == "main") {
+  			break;
+  		}
   	}
+  	
+  	std::reverse(trace.begin(), trace.end());
   	
 	return trace;
 } 
@@ -64,22 +72,13 @@ std::string sha256(std::vector<std::string> input) {
 }
 
 extern "C" bool check(char* validHash, bool hastocheck) {
-	std::string s(validHash);
-  	std::cout<< s << "\n";
-  	
 	// Get current stack trace
 	if (!hastocheck){
 		std::vector<std::string> currentTrace = stackTrace();
 		std::string hash = sha256(currentTrace);
-		
-		if(!std::memcmp(validHash, hash.c_str(), SHA256_DIGEST_LENGTH)) {
-			std::cout<< "FALSE" <<std::endl;
-			return false;
-		}
-		std::cout<< "TRUE" <<std::endl;
-		return true;
-	}
-	else {
+	
+		return std::memcmp(validHash, hash.c_str(), SHA256_DIGEST_LENGTH) == 0;
+	} else {
 		return true;
 	}
 }
