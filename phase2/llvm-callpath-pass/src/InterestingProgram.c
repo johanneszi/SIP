@@ -37,7 +37,8 @@ void print(char *message) {
 
 int main(int argc, char** argv) {
 	char inp[8];
-	
+	InterestingProcedure();
+	a();
 	gets(inp);
     return 0;
 }

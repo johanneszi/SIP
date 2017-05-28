@@ -9,47 +9,50 @@
 #include "llvm/Analysis/CallGraph.h"
 #include "llvm/Support/raw_ostream.h"
 
-#include <string>
-#include <map>
 #include <algorithm>
-#include <openssl/sha.h>
-#include <sstream>
 #include <fstream>
-#include <iomanip>
+
+#include "crypto.h"
+
+#define WARNING "\033[43m\033[1mWARNING:\033[0m"
+#define ERROR "\033[101m\033[1mERROR:\033[0m"
 
 using namespace llvm;
 
 namespace {
-	const cl::opt<std::string> FileName("ff", cl::desc("File containing new line separated functions to protect."));
-	const std::string CHECKFUNC = "check" , REPORTFUNC = "report";
-	const std::vector<std::string> ENTRYPOINTS = {"main"};
-	
 	typedef std::vector<std::vector<std::string> > VecInVec;
 	
-	struct CallPathAnalysisPass : public ModulePass {
+	const std::string CHECKFUNC = "check" , REPORTFUNC = "report";
+	const std::vector<std::string> ENTRYPOINTS = {"main"};
+	const std::string USAGE = "Specify file containing new line separated functions to protect.";
+	
+	const cl::opt<std::string> FILENAME("ff", cl::desc(USAGE));
+	
+	struct CallPathProtectorPass : public ModulePass {
 		static char ID;
-		Constant *p_check, *p_report;
+		Constant *checkFunction, *reportFunction;
 		
-		Type *intTy, *ptrTy, *voidTy, *boolTy ; // These variables are to store the type instances for primitive types.
+		Type *ptrTy, *voidTy, *boolTy ; // These variables are to store the type instances for primitive types.
 		
 		std::vector<std::string> functionsToProtect;
 		
-		CallPathAnalysisPass() : ModulePass(ID) {}
+		CallPathProtectorPass() : ModulePass(ID) {}
 		
 		bool doInitialization(Module &M) override;
 		void getAnalysisUsage(AnalysisUsage &AU) const override;
 		bool runOnModule(Module &M) override;
+		
 		VecInVec getCall(CallGraph *CG, StringRef func, std::vector<std::string> seen);
 		VecInVec getCallGraphForFunction(CallGraph *CG, StringRef func);
 		void insertProtect(Function *func, VecInVec paths);
-		void dump(VecInVec callGraph);
 		
-		
+		void dump(VecInVec callGraph, unsigned int tabs);
+		std::vector<std::string> parseFunctionToProtect();	
     };
     
-    std::vector<std::string> parseFunctionToCheckNames() {
+    std::vector<std::string> CallPathProtectorPass::parseFunctionToProtect() {
 		std::vector<std::string> functions;
-		std::ifstream infile(FileName);
+		std::ifstream infile(FILENAME);
 		
 		std::string line;
 		while (std::getline(infile, line)) {
@@ -59,58 +62,37 @@ namespace {
 	
 		// The user has to provide at least one function to protect
 		if(functions.size() == 0) {
-			//usage();
+			errs() << USAGE << "\n";
+			exit(1);
 		}
 			
 		return functions;
 	}
     
-    std::string sha256(std::vector<std::string> input) {
-		unsigned char hash[SHA256_DIGEST_LENGTH];
-		SHA256_CTX sha256;
-		SHA256_Init(&sha256);
-		
-		for (auto function : input) {
-			SHA256_Update(&sha256, function.c_str(), function.size());
-		}
-		
-		SHA256_Final(hash, &sha256);
-		std::stringstream ss;
-		for(int i = 0; i < SHA256_DIGEST_LENGTH; i++) {
-		    ss << std::hex << std::setw(2) << std::setfill('0') << (int)hash[i];
-    	}
-    
-    	return ss.str();
-	}
-    
-	bool CallPathAnalysisPass::doInitialization(Module &M) {
-	/* check if there is a function in a target program that conflicts
-		 * with the probe functions */	
-		if (M.getFunction(StringRef(CHECKFUNC)) != nullptr) {
-			errs() << "ERROR: Function " << CHECKFUNC << " already exists.\n";
-			exit(1);
-		} else if (M.getFunction(StringRef(REPORTFUNC)) != nullptr) {
-			errs() << "ERROR: Function " << REPORTFUNC << " already exists.\n";
+	bool CallPathProtectorPass::doInitialization(Module &M) {
+		// Check if there is a function in the target program that conflicts
+		// with the current set of functions
+		if (M.getFunction(StringRef(CHECKFUNC)) != nullptr || 
+			M.getFunction(StringRef(REPORTFUNC)) != nullptr) {
+			errs() << ERROR << " The target program should not contain functions called"
+				   << CHECKFUNC << " or " << REPORTFUNC << "\n";
 			exit(1);
 		}
 
-		functionsToProtect = parseFunctionToCheckNames();
+		functionsToProtect = parseFunctionToProtect();
 		
 		/* store the type instances for primitive types */
-		intTy = Type::getInt32Ty(M.getContext());
 		ptrTy = Type::getInt8PtrTy(M.getContext());
 		voidTy = Type::getVoidTy(M.getContext());
 		boolTy = Type::getInt1Ty(M.getContext());
-		voidTy = Type::getVoidTy(M.getContext());
 		
-		Type *args_types[2];
-		args_types[0] = ptrTy; //Type::getInt8PtrTy(*ctx);	
-		args_types[1] = boolTy;
-	
-		p_check = M.getOrInsertFunction(CHECKFUNC, 
-					FunctionType::get(boolTy, ArrayRef<Type *>(args_types), false));
+		Type *argsTypes[2] = {ptrTy, boolTy};
 		
-		p_report = M.getOrInsertFunction(REPORTFUNC, 
+		// Define check and report functions
+		checkFunction = M.getOrInsertFunction(CHECKFUNC, 
+					FunctionType::get(boolTy, ArrayRef<Type *>(argsTypes), false));
+		
+		reportFunction = M.getOrInsertFunction(REPORTFUNC, 
 					FunctionType::get(voidTy, boolTy, false)) ;
 				
 		return true;
@@ -118,16 +100,16 @@ namespace {
 
 
 	// getAnalysisUsage - This pass requires the CallGraph.
-	void CallPathAnalysisPass::getAnalysisUsage(AnalysisUsage &AU) const {
+	void CallPathProtectorPass::getAnalysisUsage(AnalysisUsage &AU) const {
 		AU.setPreservesAll();
 		AU.addRequired<CallGraphWrapperPass>();
 	}
 	
-	bool CallPathAnalysisPass::runOnModule(Module &M) {    	
+	bool CallPathProtectorPass::runOnModule(Module &M) {    	
 		CallGraphWrapperPass *CGPass = getAnalysisIfAvailable<CallGraphWrapperPass>();
 		CallGraph *CG = CGPass ? &CGPass->getCallGraph() : nullptr;
 		if (CG == nullptr) {
-			errs() << "ERROR: No CallGraph\n";
+			errs() << ERROR << " No CallGraph can be generated!\n";
 			return false;
 		}
 	  	
@@ -136,19 +118,21 @@ namespace {
 	  		Function *func = M.getFunction(funcName);
 	  		
 	  		if (func == nullptr || func->size() <= 0) {
-	  			errs() << "WARNING: " << funcName << " not found and will be skipped!\n";
+	  			errs() << WARNING << " Function " << funcName << " not found and will be skipped!\n";
 	  			continue;
 	  		}
 	  		
+	  		// Get all call paths for function
 	  		VecInVec funcCallPaths = getCallGraphForFunction(CG, funcName);
 	  		
 	  		if (funcCallPaths.size() > 0) { 
 	  			errs() << "Inserting in function " << funcName << " with call paths:\n";
-	  			dump(funcCallPaths);
-	  			insertProtect(func, funcCallPaths);
+	  			dump(funcCallPaths, 1);
 	  		} else {
-	  			errs() << "WARNING: Function " << funcName << " is never called\n";
+	  			errs() << WARNING << " Function " << funcName << " is never called\n";
 	  		}
+	  		
+	  		insertProtect(func, funcCallPaths);
 	  	}
 	  	
 	  	return true;		
@@ -156,35 +140,48 @@ namespace {
 	  	
 	 	
 		
-	void CallPathAnalysisPass::insertProtect(Function *func, VecInVec paths) {
+	void CallPathProtectorPass::insertProtect(Function *func, VecInVec paths) {
 		Instruction *firstInst = &*(func->getEntryBlock().getFirstInsertionPt());
 		IRBuilder<> builder(firstInst);
 		
-		std::string hash = sha256(paths[0]);
-		Value *strPtr = builder.CreateGlobalStringPtr(hash);
+		// If the function is never called, call the report function
+		if (paths.size() == 0) {
+			Value *falseValue = builder.getInt1(false);
+			builder.CreateCall(reportFunction, falseValue);
+			return;
+		} 
 		
+		// Calculate hash for the first function's path
+		std::string pathHash = sha256(paths.front());
+		Value *hashStringPointer = builder.CreateGlobalStringPtr(pathHash);
 		Value *start = builder.getInt1(false);
+		
+		// Build paramethers
 		std::vector<Value *> args;
-		args.push_back(strPtr);
+		args.push_back(hashStringPointer);
 		args.push_back(start);
 		
-		Value *function = builder.CreateCall(p_check, args);
+		// Insert function
+		Value *function = builder.CreateCall(checkFunction, args);
 		
-		
+		// Calculate hash for the other function's paths
 		for (unsigned int i = 1; i < paths.size(); i++) {
-			args.clear();
-			hash = sha256(paths[i]);
-			strPtr = builder.CreateGlobalStringPtr(hash);
+			args.clear(); // delete the parameters in args vector
 			
-			args.push_back(strPtr);
+			pathHash = sha256(paths[i]);
+			hashStringPointer = builder.CreateGlobalStringPtr(pathHash);
+			
+			args.push_back(hashStringPointer);
 			args.push_back(function);
-			function = builder.CreateCall(p_check, args);
+			
+			function = builder.CreateCall(checkFunction, args);
 		}
 		
-		builder.CreateCall(p_report, function);
+		// Finally, insert the report function
+		builder.CreateCall(reportFunction, function);
 	}
 	
-	VecInVec CallPathAnalysisPass::getCall(CallGraph *CG, StringRef func, std::vector<std::string> seen) {
+	VecInVec CallPathProtectorPass::getCall(CallGraph *CG, StringRef func, std::vector<std::string> seen) {
 		VecInVec calls;
 		VecInVec results;
 		
@@ -224,13 +221,14 @@ namespace {
 		return results;
 	}
 	
-	VecInVec CallPathAnalysisPass::getCallGraphForFunction(CallGraph *CG, StringRef func) {
+	VecInVec CallPathProtectorPass::getCallGraphForFunction(CallGraph *CG, StringRef func) {
 		return getCall(CG, func, std::vector<std::string>());
 	}
 		
-	void CallPathAnalysisPass::dump(VecInVec callGraph) {
+	void CallPathProtectorPass::dump(VecInVec callGraph, unsigned int tabs = 0) {
 		for (auto callPath : callGraph) {
 			int size = callPath.size();
+			errs() << std::string("\t", tabs);
 			for(int i = 0; i < size - 1; i++) {
 				errs() << callPath[i] << " -> ";
 			}	
@@ -239,7 +237,7 @@ namespace {
 	}
 }
 
-char CallPathAnalysisPass::ID = 0;
+char CallPathProtectorPass::ID = 0;
 
-RegisterPass<CallPathAnalysisPass> X("callpath", "Call Path Analysis Pass", false, false);
+RegisterPass<CallPathProtectorPass> X("callpath", "Call Path Protector Pass", false, false);
 
