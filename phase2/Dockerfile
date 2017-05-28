@@ -1,19 +1,30 @@
 FROM ubuntu:16.04
 
-RUN apt-get update && apt-get -y install wget cmake build-essential git vim nano libffi-dev python
+RUN apt-get update && apt-get install -y \
+	build-essential \
+	cmake \
+	git \
+	libffi-dev \
+	libssl-dev \
+	nano \
+	python \
+	vim \
+	wget \
+ && rm -rf /var/lib/apt/lists/*
 
+# Download and set up of LLVM 
 WORKDIR /home/llvm
-COPY ./llvm-4.0.0.src.tar.xz /home/llvm
-COPY ./cfe-4.0.0.src.tar.xz /home/llvm
-COPY ./compiler-rt-4.0.0.src.tar.xz /home/llvm
-RUN tar -xf llvm-4.0.0.src.tar.xz
+RUN wget http://llvm.org/releases/4.0.0/llvm-4.0.0.src.tar.xz && \
+	wget http://llvm.org/releases/4.0.0/cfe-4.0.0.src.tar.xz && \
+	wget http://llvm.org/releases/4.0.0/compiler-rt-4.0.0.src.tar.xz && \
+	tar -xf llvm-4.0.0.src.tar.xz && \
+	tar -xf cfe-4.0.0.src.tar.xz -C llvm-4.0.0.src/tools && \
+	tar -xf compiler-rt-4.0.0.src.tar.xz -C llvm-4.0.0.src/projects && \
+	mv llvm-4.0.0.src/tools/cfe-4.0.0.src llvm-4.0.0.src/tools/clang && \
+	mv llvm-4.0.0.src/projects/compiler-rt-4.0.0.src llvm-4.0.0.src/projects/compiler-rt && \
+	rm -f llvm-4.0.0.src.tar.xz cfe-4.0.0.src.tar.xz compiler-rt-4.0.0.src.tar.xz
 
-WORKDIR /home/llvm/llvm-4.0.0.src
-RUN tar -xf ../cfe-4.0.0.src.tar.xz -C tools && \
-	tar -xf ../compiler-rt-4.0.0.src.tar.xz -C projects && \
-	mv tools/cfe-4.0.0.src tools/clang && \
-	mv projects/compiler-rt-4.0.0.src projects/compiler-rt
-
+# Build LLVM
 WORKDIR /home/llvm/llvm-4.0.0.src/build
 RUN CC=gcc CXX=g++ \
 	cmake -DCMAKE_INSTALL_PREFIX=/usr \
@@ -23,3 +34,11 @@ RUN CC=gcc CXX=g++ \
       -DLLVM_TARGETS_TO_BUILD="host;AMDGPU" \
       -Wno-dev .. && \
 	make -j 2 && make install
+
+# Set up project repo
+#WORKDIR /home
+#RUN git clone https://github.com/johanneszi/SIP.git
+
+#WORKDIR /home/SIP/phase2/llvm-callpath-pass
+#RUN make	
+
