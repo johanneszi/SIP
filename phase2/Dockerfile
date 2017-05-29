@@ -36,9 +36,9 @@ RUN CC=gcc CXX=g++ \
 	make -j 2 && make install
 
 # Set up project repo
-#WORKDIR /home
-#RUN git clone https://github.com/johanneszi/SIP.git
+WORKDIR /home
+RUN git clone https://github.com/johanneszi/SIP.git
 
-#WORKDIR /home/SIP/phase2/llvm-callpath-pass
-#RUN make	
+WORKDIR /home/SIP/phase2/llvm-callpath-pass
+RUN make	
 
