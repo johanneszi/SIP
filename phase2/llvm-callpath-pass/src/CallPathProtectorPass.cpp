@@ -26,8 +26,9 @@ namespace {
 	const std::vector<std::string> ENTRYPOINTS = {"main"};
 	const std::string USAGE = "Specify file containing new line separated functions to protect.";
 	
-	const cl::opt<std::string> FILENAME("ff", cl::desc(USAGE));
-	
+	//const cl::opt<std::string> FILENAME("ff", cl::desc(USAGE));
+	const std::string FILENAME = "../results/funcsToCheck";
+
 	struct CallPathProtectorPass : public ModulePass {
 		static char ID;
 		Constant *checkFunction, *reportFunction;

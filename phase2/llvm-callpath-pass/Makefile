@@ -1,4 +1,4 @@
-LLVM_INCLUDES = -I/usr/include/llvm
+LLVM_INCLUDES = -I/usr/include/llvm-3.9
 
 SOURCE = src/
 BUILD = build/
@@ -9,8 +9,8 @@ CXXFLAGS = -g -rdynamic
 CXXFLAGS_LLVM = -fno-rtti -rdynamic -O3 $(LLVM_INCLUDES)
 
 LLVM_CONFIG_COMMAND = \
-		`/usr/bin/llvm-config --cxxflags --libs` \
-		`/usr/bin/llvm-config --ldflags`
+		`/usr/bin/llvm-config-3.9 --cxxflags --libs` \
+		`/usr/bin/llvm-config-3.9 --ldflags`
 
 PROG = crypto.o libCallPathProtectorPass.so libcheck.o 
 TARGETS = $(addprefix $(BUILD), $(PROG))
