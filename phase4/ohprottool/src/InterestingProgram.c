@@ -1,0 +1,88 @@
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+
+char* isValidLicenseKey(const char* input) {
+    if(strcmp(input, "ValidLicenseKey") == 0) {
+        return "A";
+    }
+    return "C";
+}
+
+char addChar(char a, char b) {
+    return a < b ? a + b : b + a;
+}
+
+short add(short a, short b) {
+    return a < b ? a + b : b + a;
+}
+
+int mul(int a, int b) {
+    return a < b ? a * b : b * a;
+}
+
+long sub(long a, long b) {
+    return a < b ? a - b : b - a;
+}
+
+int max(int a, int b, int c) {
+    if (a > b) {
+        if (a > c) {
+            // a > b && a > c
+            return a;
+        } else {
+            // a > b && a <= c;
+            return c;
+        }
+    } else {
+        if (b > c) {
+            // b >= a && b > c
+            return b;
+        } else {
+            // b >= a && b <= c
+            return c;
+        }
+    }
+}
+
+int min(int a, int b, int c) {
+    if (a < b) {
+        if (a < c) {
+            // a < b && a < c
+            return a;
+        } else {
+           // a < b && a <= c;
+           return c;
+        }
+    } else {
+        if (b < c) {
+            // b >= a && b > c
+            return b;
+        } else {
+            // b >= a && b <= c
+            return c;
+        }
+    }
+}
+
+void InterestingProcedure() {
+    printf("\t This is an interesting procedure\n");
+}
+
+void print(char *message) {
+    InterestingProcedure();
+    printf("%s\n", message);
+}
+
+int main(int argc, char** argv) {
+    printf("3 + 2 = %d\n", add(3, 2));
+    printf("3 - 2 = %ld\n", sub(3, 2));
+    printf("3 * 2 = %d\n", mul(3, 2));
+    printf("Valid key? %s\n", isValidLicenseKey("veryvalidmuchsecure"));
+    printf("max(3, 2, 1) is %d\n\n", max(3, 2, 1));
+
+    InterestingProcedure();
+    print("Nachricht");
+
+    return 0;
+}
