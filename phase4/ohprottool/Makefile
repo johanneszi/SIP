@@ -27,7 +27,7 @@ $(BUILD)libcheck.o: $(SOURCE)libcheck.c
 	$(CC) -c -fPIC $(CCFLAGS) $^ -o $@
 
 $(BUILD)%.o: $(SOURCE)%.cpp
-	$(CXX) -c -fPIC -std=c++11 $(CXXFLAGS_LLVM) $(LLVM_CONFIG_COMMAND) $^ -o $@
+	$(CXX) -c -fPIC -std=c++11 $(CXXFLAGS) $(CXXFLAGS_LLVM) $(LLVM_CONFIG_COMMAND) $^ -o $@
 
 $(BUILD)libOHProtectorPass.so: $(BUILD)OHProtectorPass.o
 	$(CXX) $(CXXFLAGS) $(CXXFLAGS_LLVM) -shared $(LLVM_CONFIG_COMMAND) $^ -o $@
