@@ -8,6 +8,7 @@
 namespace llvm {
 class GlobalVariable;
 class LoopInfo;
+class PostDominatorTree;
 }
 
 namespace input_dependency {
@@ -20,6 +21,7 @@ public:
     FunctionAnaliser(llvm::Function* F,
                      llvm::AAResults& AAR,
                      llvm::LoopInfo& LI,
+                     const llvm::PostDominatorTree& PDom,
                      const VirtualCallSiteAnalysisResult& virtualCallsInfo,
                      const FunctionAnalysisGetter& getter);
 
@@ -42,37 +44,20 @@ public:
      * \brief Finalizes input dependency analysis by refining \link analize results with given set of input dependent arguments.
      * \param[in] inputDepArgs Arguments which are actually input dependent.
      * 
+     * \note Instruction can be marked as input dependent in \a analize however if it does not depend on arguments
+     *        from \a inputDepArgs, it will be unmarked.
      * \note \link analize function should be called before calling this function.
      */
     void finalizeArguments(const DependencyAnaliser::ArgumentDependenciesMap& inputDepArgs);
-
-
-    /**
-     * \brief Finalizes input dependency analysis by refining \link analize results with given globals dependency info.
-     * \param[in] globalsDeps globals dependency information collected from other functions.
-     * 
-     * \note Only instructions which depend on any global from \a globalsDeps may be affected by this call.
-     * \note \link analize function should be called before calling this function.
-     */
     void finalizeGlobals(const DependencyAnaliser::GlobalVariableDependencyMap& globalsDeps);
 
-    /// Returns set of functions which have call sites in \a m_F
+    /// Get call site info collected by \link analize function.
     FunctionSet getCallSitesData() const;
 
-    /**
-    * \brief Get arguments dependency information for the given function, collected by this analiser
-    * \param F Function for which dependency info should be returned.
-    * \note \a F should have call site in \a m_F
-    */
     const DependencyAnaliser::ArgumentDependenciesMap& getCallArgumentInfo(llvm::Function* F) const;
-    // can't return with reference. try get with r-reference to avoid copy
-    FunctionCallDepInfo getFunctionCallDepInfo(llvm::Function* F) const;
 
-    /**
-    * \brief Get globals dependency information for the given function, collected by this analiser
-    * \param F Function for which dependency info should be returned.
-    * \note \a F should have call site in \a m_F
-    */
+    // can't return with reference. Get with r-value if possible, to avoid copy
+    FunctionCallDepInfo getFunctionCallDepInfo(llvm::Function* F) const;
     DependencyAnaliser::GlobalVariableDependencyMap getCallGlobalsInfo(llvm::Function* F) const;
 
     /**
@@ -90,13 +75,7 @@ public:
     bool isInputIndependent(llvm::Instruction* instr) const;
     bool isInputIndependent(const llvm::Instruction* instr) const;
 
-    /// Checks if \a m_F makes its output parameter \a arg dependent to input.
     bool isOutArgInputIndependent(llvm::Argument* arg) const;
-
-    /**
-    * \brief Returns input dependency information for the given \a arg.
-    *        If there is no dependency information for \a arg, returns invalid dep info.
-    */
     DepInfo getOutArgDependencies(llvm::Argument* arg) const;
     bool isReturnValueInputIndependent() const;
     const DepInfo& getRetValueDependencies() const;

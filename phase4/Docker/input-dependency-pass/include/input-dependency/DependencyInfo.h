@@ -1,6 +1,8 @@
 #pragma once
 
 #include "definitions.h"
+#include "llvm/Support/Casting.h"
+#include "llvm/IR/Value.h"
 
 namespace input_dependency {
 
@@ -72,6 +74,20 @@ public:
         return m_dependency == VALUE_DEP || !m_valueDependencies.empty();
     }
 
+    // TODO: maybe keeping global dependencies separatelly will be more efficient
+    bool isOnlyGlobalValueDependent() const
+    {
+        if (m_valueDependencies.empty()) {
+            return false;
+        }
+        for (const auto& val : m_valueDependencies) {
+            if (!llvm::dyn_cast<llvm::GlobalVariable>(val)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     const Dependency& getDependency() const
     {
         return m_dependency;
@@ -138,9 +154,18 @@ public:
     {
         this->m_dependency = std::max(this->m_dependency, info.m_dependency);
         this->m_valueDependencies.insert(info.m_valueDependencies.begin(),
-                                       info.m_valueDependencies.end());
+                                         info.m_valueDependencies.end());
         this->m_argumentDependencies.insert(info.m_argumentDependencies.begin(),
-                                          info.m_argumentDependencies.end());
+                                            info.m_argumentDependencies.end());
+    }
+
+    void mergeDependencies(DepInfo&& info)
+    {
+        this->m_dependency = std::max(this->m_dependency, info.m_dependency);
+        this->m_valueDependencies.insert(info.m_valueDependencies.begin(),
+                                         info.m_valueDependencies.end());
+        this->m_argumentDependencies.insert(info.m_argumentDependencies.begin(),
+                                            info.m_argumentDependencies.end());
     }
 
     void mergeDependencies(const ArgumentSet& argDeps)
@@ -158,39 +183,6 @@ public:
         this->m_dependency = std::max(this->m_dependency, dep);
     }
 
-    void addOnDepInfo(const DepInfo& info)
-    {
-        mergeDependency(info.getDependency());
-        addOnArgumentDependencies(info.getArgumentDependencies());
-        addOnValueDependencies(info.getValueDependencies());
-    }
-
-    void addOnDepInfo(DepInfo&& info)
-    {
-        mergeDependency(info.getDependency());
-        addOnArgumentDependencies(info.getArgumentDependencies());
-        addOnValueDependencies(info.getValueDependencies());
-    }
-
-    void addOnArgumentDependencies(const ArgumentSet& argDeps)
-    {
-        m_argumentDependencies.insert(argDeps.begin(), argDeps.end());
-    }
-
-    void addOnArgumentDependencies(ArgumentSet&& argDeps)
-    {
-        m_argumentDependencies.insert(argDeps.begin(), argDeps.end());
-    }
-
-    void addOnValueDependencies(const ValueSet& valueDeps)
-    {
-        m_valueDependencies.insert(valueDeps.begin(), valueDeps.end());
-    }
-
-    void addOnValueDependencies(ValueSet&& valueDeps)
-    {
-        m_valueDependencies.insert(valueDeps.begin(), valueDeps.end());
-    }
 
 private:
     Dependency m_dependency;
