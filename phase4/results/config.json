@@ -1,6 +1,6 @@
 {
     "program" : "src/InterestingProgram.c",
-    "hashVariables" : 2,
+    "hashVariables" : 5,
     "verbose" : true
 }
 

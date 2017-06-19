@@ -50,7 +50,7 @@ exitIfFail $?
 
 opt-3.9 -load "${libs}libInputDependency.so" \
         -load "${build}libOHProtectorPass.so" \
-        "${build}${cfile}.bc" -OHProtect -o "${build}${cfile}-inst.bc"
+        "${build}${cfile}.bc" -OHProtect -ff $filename -o "${build}${cfile}-inst.bc"
 exitIfFail $?
 
 llc-3.9 -filetype=obj "${build}${cfile}-inst.bc"

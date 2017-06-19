@@ -13,12 +13,12 @@
 #include <string>
 #include <vector>
 #include <algorithm>
+#include <fstream>
 #include <random>
 #include <ctime>
 
 #include <json/value.h>
 #include <json/reader.h>
-#include <json/writer.h>
 
 #define WARNING "\033[43m\033[1mWARNING:\033[0m "
 #define ERROR "\033[101m\033[1mERROR:\033[0m "
@@ -32,10 +32,13 @@ namespace {
                                                            Instruction::ICmp, Instruction::Sub,
                                                            Instruction::Add};
 
+    const static string USAGE = "Specify file containing configuration file!";
+    const cl::opt<string> FILENAME("ff", cl::desc(USAGE.c_str()));
+
     struct OHProtectorPass : public ModulePass {
         // Variables
         static char ID;
-        int numHashVariables = 5;
+        int numHashVariables = 0;
         bool verbose = false;
 
         Type *boolTy, *voidTy, *int32Ty;
@@ -55,11 +58,51 @@ namespace {
         void insertGlobals(Module &M, int numHashVars);
         void insertProtection(Module &M, vector<Instruction *> instuctions, bool finalRun);
         BinaryOperator* generateHashFunction(IRBuilder<> *builder, Value *operandOne, Value *operandTwo);
-        template<typename T>
-        vector<T *> twistGetPartFromVector(vector<T *> input, double procent);
+        template<typename T> vector<T *> twistGetPartFromVector(vector<T *> input, double procent);
+
+        Json::Value parseJSONFromFile(string fileName);
+        void parseConfiguration(string fileName);
     };
 
+    void OHProtectorPass::parseConfiguration(string fileName) {
+        Json::Value config = parseJSONFromFile(fileName); // Parse config file
+
+        numHashVariables = config["hashVariables"].asInt();
+        verbose = config["verbose"].asBool();
+
+        if (numHashVariables < 1 || numHashVariables > 99) {
+            errs() << ERROR << "Not initialised correctly! Number of hash variables"
+                            << "should be between 1 and 99!\n";
+            exit(1);
+        }
+    }
+
+    Json::Value OHProtectorPass::parseJSONFromFile(string fileName) {
+        Json::Value root;
+        Json::Reader reader;
+
+        std::ifstream file(fileName);
+
+        if (!file.good()) {
+            errs() << ERROR << "File " << fileName << " could not be found!\n";
+            exit(1);
+        }
+
+        bool parsingSuccessful = reader.parse(file, root, false);
+
+        if (!parsingSuccessful) {
+            errs()  << WARNING << "Failed to parse file " << fileName << " correctly!\n"
+                    << reader.getFormattedErrorMessages() << "\n";
+        }
+
+        file.close();
+
+        return root;
+    }
+
     bool OHProtectorPass::doInitialization(Module &M) {
+        parseConfiguration(FILENAME);
+
         LLVMContext &ctx = M.getContext();
 
         boolTy = Type::getInt1Ty(ctx);
