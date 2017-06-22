@@ -56,5 +56,5 @@ exitIfFail $?
 llc-3.9 -filetype=obj "${build}${cfile}-inst.bc"
 exitIfFail $?
 
-g++ -rdynamic "${build}${cfile}-inst.o" "${build}libcheck.o" -o "${build}${cfile}-rewritten"
+g++ -rdynamic "${build}${cfile}-inst.o" -o "${build}${cfile}-rewritten"
 exitIfFail $?

@@ -3,8 +3,8 @@
 #include "llvm/IR/Function.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Instruction.h"
-#include "llvm/IR/InstrTypes.h"
 #include "llvm/IR/IRBuilder.h"
+#include "llvm/IR/InlineAsm.h"
 
 #include "llvm/Support/raw_ostream.h"
 
@@ -28,8 +28,7 @@ using std::vector;
 using std::string;
 
 namespace {
-    const string INITRANDOMFUNC = "initRandom" , REPORTFUNC = "report";
-    const static vector<string> ENTRYPOINTS = { "main" };
+    const string PUTSFUNC = "puts";
     const static vector<unsigned> PROTECTEDINSTRUCTIONS = {Instruction::Load, Instruction::Store,
                                                            Instruction::ICmp, Instruction::Sub,
                                                            Instruction::Add};
@@ -43,8 +42,8 @@ namespace {
         int numHashVariables = 0;
         bool verbose = false;
 
-        Type *boolTy, *voidTy, *int32Ty;
-        Constant *initRandomFunction, *reportFunction;
+        Type *ptrTy, *voidTy, *int32Ty;
+        Constant *putsFunction = nullptr;
 
         vector<Instruction *> instToProtect, instToObfuscate;
         vector<GlobalVariable *> globals;
@@ -61,14 +60,197 @@ namespace {
         bool shouldProtect(Instruction *instruction);
         void insertGlobals(Module &M, int numHashVars);
         void insertProtection(IRBuilder<> *builder, vector<Instruction *> instuctions, bool finalRun);
-        void insertRandomSeedFunction(Module &M, IRBuilder<> *builder);
+        void insertReportFunction(IRBuilder<> *builder);
         BinaryOperator* generateHashFunction(IRBuilder<> *builder, Value *operandOne, Value *operandTwo);
 
         template<typename T> vector<T *> twistGetPartFromVector(vector<T *> input, double procent);
-
+        bool isPtrToPtr(Value *value);
         Json::Value parseJSONFromFile(string fileName);
         void parseConfiguration(string fileName);
     };
+
+    bool OHProtectorPass::doInitialization(Module &M) {
+        parseConfiguration(FILENAME);
+
+        LLVMContext &ctx = M.getContext();
+
+        ptrTy = Type::getInt8PtrTy(ctx);
+        voidTy = Type::getVoidTy(ctx);
+        int32Ty = Type::getInt32Ty(ctx);
+
+        if (verbose) {
+            putsFunction = M.getOrInsertFunction(PUTSFUNC, FunctionType::get(voidTy, ptrTy, false));
+        }
+
+        srand(time(0));
+
+        return false;
+    }
+
+    void OHProtectorPass::getAnalysisUsage(AnalysisUsage &AU) const {
+        AU.setPreservesAll();
+        AU.addRequired<input_dependency::InputDependencyAnalysis>();
+    }
+
+    bool OHProtectorPass::runOnModule(Module &M) {
+        const auto &input_dependency_info = getAnalysis<input_dependency::InputDependencyAnalysis>();
+
+        LLVMContext &ctx = M.getContext();
+        IRBuilder<> builder(ctx);
+
+        insertGlobals(M, numHashVariables);
+
+        // Save all input independent instructions which has to be protected
+        for (auto &F : M) {
+            // No input dependency info for declarations
+            if (F.isDeclaration()) {
+                continue;
+            }
+
+            for (auto &B : F) {
+                for (auto &I : B) {
+                    if (shouldProtect(&I) && !input_dependency_info.isInputDependent(&I)) {
+                        instToProtect.push_back(&I);
+                    }
+                }
+            }
+        }
+
+        insertProtection(&builder, instToProtect, false);
+
+        vector<Instruction *> instToObfuscatePart = twistGetPartFromVector(instToObfuscate, 0.2);
+        instToObfuscate.clear();
+
+        insertProtection(&builder, instToObfuscatePart, true);
+
+        return true;
+    }
+
+    void OHProtectorPass::insertProtection(IRBuilder<> *builder, vector<Instruction *> instuctions, bool finalRun) {
+        std::mt19937 twister(rd());
+
+        unsigned int globalsIndex = 0;
+        GlobalVariable *currentGlobal;
+        LoadInst *loadGlobal;
+        Value *toCast;
+
+        for (auto *I : instuctions) {
+            builder->SetInsertPoint(I->getNextNode());
+            currentGlobal = globals[globalsIndex];
+
+            loadGlobal = builder->CreateLoad(currentGlobal);
+
+            switch (I->getOpcode()) {
+                case Instruction::Load: {
+                    LoadInst *loadInst = dyn_cast<LoadInst>(I);
+                    if (isPtrToPtr(loadInst->getPointerOperand())) {
+                        continue;
+                    }
+
+                    toCast = loadInst;
+                    break;
+                }
+                case Instruction::Store: {
+                    StoreInst *storeInst = dyn_cast<StoreInst>(I);
+                    if (isPtrToPtr(storeInst->getPointerOperand())) {
+                        continue;
+                    }
+
+                    toCast = builder->CreateLoad(storeInst->getPointerOperand());
+                    break;
+                }
+                case Instruction::ICmp: {
+                    toCast = dyn_cast<ICmpInst>(I);
+                    break;
+                }
+                case Instruction::Sub: case Instruction::Add: case Instruction::Xor: {
+                    Value *firstOperand = I->getOperand(0);
+                    Value *secondOperand = I->getOperand(1);
+
+                    toCast = generateHashFunction(builder, firstOperand, secondOperand);
+                    break;
+                }
+                default:
+                    errs() << ERROR << "Instruction type cannot be protected\n";
+                    I->dump();
+                    exit(1);
+            }
+
+            Value *casted = builder->CreateIntCast(toCast, int32Ty, false);
+            BinaryOperator *hash = generateHashFunction(builder, casted, loadGlobal);
+            StoreInst *storeGlobal = builder->CreateStore(hash, currentGlobal);
+
+            if (!finalRun) {
+                instToObfuscate.push_back(loadGlobal);
+                instToObfuscate.push_back(hash);
+                instToObfuscate.push_back(storeGlobal);
+            }
+
+            globalsIndex++;
+            if (globalsIndex >= globals.size()) {
+                globalsIndex = 0;
+
+                std::shuffle(globals.begin(), globals.end(), twister);
+            }
+        }
+    }
+
+    void OHProtectorPass::insertGlobals(Module &M, int numHashVars) {
+        for (int i = 0; i < numHashVars; i++) {
+            GlobalVariable *global = new GlobalVariable(M, int32Ty, false, GlobalValue::CommonLinkage,
+                                                        0, "veryglobalmuchsecure");
+            global->setAlignment(4);
+
+            // Constant Definitions
+            ConstantInt *constInt = ConstantInt::get(M.getContext(), APInt(32, 0));
+
+            // Global Variable Definitions
+            global->setInitializer(constInt);
+
+            globals.push_back(global);
+        }
+    }
+
+    void OHProtectorPass::insertReportFunction(IRBuilder<> *builder) {
+        if (verbose) {
+            Value *corruptedString = builder->CreateGlobalStringPtr("Hash corrupted!");
+            builder->CreateCall(putsFunction, corruptedString);
+        }
+
+        InlineAsm *corruptStack = InlineAsm::get(FunctionType::get(voidTy, false), "add $$0x10, %rsp", "", false);
+        builder->CreateCall(corruptStack);
+    }
+
+    BinaryOperator* OHProtectorPass::generateHashFunction(IRBuilder<> *builder, Value *operandOne, Value *operandTwo) {
+        int randNum = rand() % 2;
+
+        if (randNum == 0) {
+            return dyn_cast<BinaryOperator>(builder->CreateAdd(operandOne, operandTwo));
+        }
+
+        return dyn_cast<BinaryOperator>(builder->CreateXor(operandOne, operandTwo));
+    }
+
+    bool OHProtectorPass::shouldProtect(Instruction *instruction) {
+        unsigned int opCode = instruction->getOpcode();
+        return std::find(PROTECTEDINSTRUCTIONS.begin(), PROTECTEDINSTRUCTIONS.end(), opCode) != PROTECTEDINSTRUCTIONS.end();
+    }
+
+    template<typename T>
+    vector<T *> OHProtectorPass::twistGetPartFromVector(vector<T *> input, double procent) {
+        std::mt19937 twister(rd());
+        std::shuffle(input.begin(), input.end(), twister);
+
+        typename vector<T *>::const_iterator first = input.begin();
+        typename vector<T *>::const_iterator last = input.begin() + int(input.size() * procent);
+        vector<T *> part(first, last);
+
+        return part;
+    }
+
+    bool OHProtectorPass::isPtrToPtr(Value *value) {
+        return value->getType()->getContainedType(0)->isPointerTy();
+    }
 
     void OHProtectorPass::parseConfiguration(string fileName) {
         Json::Value config = parseJSONFromFile(fileName); // Parse config file
@@ -104,253 +286,6 @@ namespace {
         file.close();
 
         return root;
-    }
-
-    bool OHProtectorPass::doInitialization(Module &M) {
-        if (M.getFunction(StringRef(INITRANDOMFUNC)) != nullptr ||
-            M.getFunction(StringRef(REPORTFUNC)) != nullptr) {
-
-            errs() << ERROR << " The target program should not contain functions called"
-                   << INITRANDOMFUNC << " or " << REPORTFUNC << "\n";
-            exit(1);
-        }
-        
-        parseConfiguration(FILENAME);
-
-        LLVMContext &ctx = M.getContext();
-
-        boolTy = Type::getInt1Ty(ctx);
-        voidTy = Type::getVoidTy(ctx);
-        int32Ty = Type::getInt32Ty(ctx);
-
-        initRandomFunction = M.getOrInsertFunction(INITRANDOMFUNC, FunctionType::get(voidTy, false));
-        reportFunction = M.getOrInsertFunction(REPORTFUNC, FunctionType::get(voidTy, false));
-
-        srand(time(0));
-
-        return false;
-    }
-
-    void OHProtectorPass::getAnalysisUsage(AnalysisUsage &AU) const {
-        AU.setPreservesAll();
-        AU.addRequired<input_dependency::InputDependencyAnalysis>();
-    }
-
-    bool OHProtectorPass::runOnModule(Module &M) {
-        const auto &input_dependency_info = getAnalysis<input_dependency::InputDependencyAnalysis>();
-
-        LLVMContext &ctx = M.getContext();
-        IRBuilder<> builder(ctx);
-
-        insertGlobals(M, numHashVariables);
-        insertRandomSeedFunction(M, &builder);
-
-        // Save all input independent instructions which has to be protected
-        for (auto &F : M) {
-            // No input dependency info for declarations
-            if (F.isDeclaration()) {
-                continue;
-            }
-
-            for (auto &B : F) {
-                for (auto &I : B) {
-                    if (shouldProtect(&I) && !input_dependency_info.isInputDependent(&I)) {
-                        instToProtect.push_back(&I);
-                    }
-                }
-            }
-        }
-
-        insertProtection(&builder, instToProtect, false);
-
-        vector<Instruction *> instToObfuscatePart = twistGetPartFromVector(instToObfuscate, 0.2);
-        instToObfuscate.clear();
-
-        insertProtection(&builder, instToObfuscatePart, true);
-
-        return true;
-    }
-
-    template<typename T>
-    vector<T *> OHProtectorPass::twistGetPartFromVector(vector<T *> input, double procent) {
-        std::mt19937 twister(rd());
-        std::shuffle(input.begin(), input.end(), twister);
-
-        typename vector<T *>::const_iterator first = input.begin();
-        typename vector<T *>::const_iterator last = input.begin() + int(input.size() * procent);
-        vector<T *> part(first, last);
-
-        return part;
-    }
-
-    bool OHProtectorPass::shouldProtect(Instruction *instruction) {
-        unsigned opCode = instruction->getOpcode();
-        return std::find(PROTECTEDINSTRUCTIONS.begin(), PROTECTEDINSTRUCTIONS.end(), opCode) != PROTECTEDINSTRUCTIONS.end();
-    }
-
-    BinaryOperator* OHProtectorPass::generateHashFunction(IRBuilder<> *builder, Value *operandOne, Value *operandTwo) {
-        int randNum = rand() % 2;
-
-        if (randNum == 0) {
-            return dyn_cast<BinaryOperator>(builder->CreateAdd(operandOne, operandTwo));
-        }
-
-        return dyn_cast<BinaryOperator>(builder->CreateXor(operandOne, operandTwo));
-    }
-
-    void OHProtectorPass::insertProtection(IRBuilder<> *builder, vector<Instruction *> instuctions, bool finalRun) {
-        unsigned int globalsIndex = 0;
-        std::mt19937 twister(rd());
-
-        for (auto *I : instuctions) {
-
-            switch (I->getOpcode()) {
-                case Instruction::Load: {
-                    auto *instruction = dyn_cast<LoadInst>(I);
-
-                    Value *memory = instruction->getPointerOperand();
-                    Type *type = memory->getType();
-                    Type *content = type->getContainedType(0);
-
-                    if(content->isPointerTy()) {
-                        continue;
-                    }
-
-                    builder->SetInsertPoint(instruction->getNextNode());
-
-                    LoadInst *loadGlobal = builder->CreateLoad(globals[globalsIndex]);
-                    Value *casted = CastInst::CreateIntegerCast(instruction, int32Ty, false, "", loadGlobal->getNextNode());
-                    BinaryOperator *hash = generateHashFunction(builder, casted, loadGlobal);
-                    StoreInst *storeGlobal = builder->CreateStore(hash, globals[globalsIndex]);
-
-                    if (!finalRun) {
-                        instToObfuscate.push_back(hash);
-                        instToObfuscate.push_back(loadGlobal);
-                        instToObfuscate.push_back(storeGlobal);
-                    }
-
-                    break;
-                }
-                case Instruction::Store: {
-                    auto *instruction = dyn_cast<StoreInst>(I);
-
-                    Value *memory = instruction->getPointerOperand();
-                    Type *type = memory->getType();
-                    Type *content = type->getContainedType(0);
-
-                    if(content->isPointerTy()) {
-                        continue;
-                    }
-
-                    builder->SetInsertPoint(instruction->getNextNode());
-
-                    LoadInst *loadValue = builder->CreateLoad(memory);
-                    LoadInst *loadGlobal = builder->CreateLoad(globals[globalsIndex]);
-                    Value *casted = CastInst::CreateIntegerCast(loadValue, int32Ty, false, "", loadGlobal->getNextNode());
-
-                    BinaryOperator *hash = generateHashFunction(builder, casted, loadGlobal);
-                    StoreInst *storeGlobal = builder->CreateStore(hash, globals[globalsIndex]);
-
-                    if (!finalRun) {
-                        instToObfuscate.push_back(hash);
-                        instToObfuscate.push_back(loadGlobal);
-                        instToObfuscate.push_back(storeGlobal);
-                    }
-
-                    break;
-                }
-                case Instruction::ICmp: {
-                    auto *instruction = dyn_cast<ICmpInst>(I);
-
-                    builder->SetInsertPoint(instruction->getNextNode());
-
-                    LoadInst *loadGlobal = builder->CreateLoad(globals[globalsIndex]);
-                    Value *casted = CastInst::CreateIntegerCast(instruction, int32Ty, false, "", loadGlobal->getNextNode());
-                    BinaryOperator *hash = generateHashFunction(builder, casted, loadGlobal);
-                    StoreInst *storeGlobal = builder->CreateStore(hash, globals[globalsIndex]);
-
-                    if (!finalRun) {
-                        instToObfuscate.push_back(hash);
-                        instToObfuscate.push_back(loadGlobal);
-                        instToObfuscate.push_back(storeGlobal);
-                    }
-
-                    break;
-                }
-                case Instruction::Sub: case Instruction::Add: {
-                    auto *instruction = dyn_cast<BinaryOperator>(I);
-
-                    builder->SetInsertPoint(instruction->getNextNode());
-
-                    LoadInst *loadGlobal = builder->CreateLoad(globals[globalsIndex]);
-
-                    Value *firstOperand = instruction->getOperand(0);
-                    firstOperand = CastInst::CreateIntegerCast(firstOperand, int32Ty, false, "", loadGlobal->getNextNode());
-                    Value *secondOperand = instruction->getOperand(1);
-                    secondOperand = CastInst::CreateIntegerCast(secondOperand, int32Ty, false, "", loadGlobal->getNextNode());
-
-                    BinaryOperator *intermediateHash = generateHashFunction(builder, firstOperand, loadGlobal);
-                    BinaryOperator *hash = generateHashFunction(builder, secondOperand, intermediateHash);
-                    StoreInst *storeGlobal = builder->CreateStore(hash, globals[globalsIndex]);
-
-                    if (!finalRun) {
-                        instToObfuscate.push_back(intermediateHash);
-                        instToObfuscate.push_back(hash);
-                        instToObfuscate.push_back(loadGlobal);
-                        instToObfuscate.push_back(storeGlobal);
-                    }
-
-                    break;
-                }
-
-                default:
-                    break;
-            }
-
-            globalsIndex++;
-            if (globalsIndex >= globals.size()) {
-                globalsIndex = 0;
-
-                std::shuffle(globals.begin(), globals.end(), twister);
-            }
-        }
-    }
-
-    void OHProtectorPass::insertGlobals(Module &M, int numHashVars) {
-        for (int i = 0; i < numHashVars; i++) {
-            GlobalVariable *global = new GlobalVariable(M, int32Ty, false, GlobalValue::CommonLinkage,
-                                                        0, "veryglobalmuchsecure");
-            global->setAlignment(4);
-
-            // Constant Definitions
-            ConstantInt *constInt = ConstantInt::get(M.getContext(), APInt(32, 0));
-
-            // Global Variable Definitions
-            global->setInitializer(constInt);
-
-            globals.push_back(global);
-        }
-    }
-
-    void OHProtectorPass::insertRandomSeedFunction(Module &M, IRBuilder<> *builder) {
-        Function *F = nullptr;
-
-        // Find a valid function to insert the seedRandom
-        for (auto function : ENTRYPOINTS) {
-            F = M.getFunction(function);
-
-            // Found a function to insert
-            if (F != nullptr && F->size() > 0 && !F->isDeclaration()) { break; }
-        }
-
-        if (F != nullptr && F->size() > 0 && !F->isDeclaration()) {
-            Instruction *firstInst = &*(F->getEntryBlock().getFirstInsertionPt());
-
-            builder->SetInsertPoint(firstInst);
-            builder->CreateCall(initRandomFunction);
-        } else {
-            errs() << WARNING << "Random function cannot be seeded!\n";
-        }
     }
 }
 
