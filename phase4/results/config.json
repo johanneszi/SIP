@@ -1,6 +1,8 @@
 {
     "program" : "src/InterestingProgram.c",
     "hashVariables" : 5,
+    "checksPerHashVariable": 1,
+    "obfuscationLevel":0.2,
     "verbose" : true
 }
 

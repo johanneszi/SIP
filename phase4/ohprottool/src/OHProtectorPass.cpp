@@ -5,6 +5,7 @@
 #include "llvm/IR/Instruction.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/InlineAsm.h"
+#include "llvm/Transforms/Utils/BasicBlockUtils.h"
 
 #include "llvm/Support/raw_ostream.h"
 
@@ -16,6 +17,7 @@
 #include <fstream>
 #include <random>
 #include <ctime>
+#include <limits>
 
 #include <json/value.h>
 #include <json/reader.h>
@@ -28,7 +30,7 @@ using std::vector;
 using std::string;
 
 namespace {
-    const string PUTSFUNC = "puts";
+    const string PUTSFUNC = "puts", PRINTFFUNC = "printf";
     const static vector<unsigned> PROTECTEDINSTRUCTIONS = {Instruction::Load, Instruction::Store,
                                                            Instruction::ICmp, Instruction::Sub,
                                                            Instruction::Add};
@@ -40,14 +42,17 @@ namespace {
         // Variables
         static char ID;
         int numHashVariables = 0;
+        int checksPerHashVariable = 0;
+        double obfuscationLevel = 0;
         bool verbose = false;
 
         Type *ptrTy, *voidTy, *int32Ty;
-        Constant *putsFunction = nullptr;
+        Constant *putsFunction = nullptr, *printfFunction;
 
         vector<Instruction *> instToProtect, instToObfuscate;
         vector<GlobalVariable *> globals;
-
+        vector<int> ids;
+        
         std::random_device rd;
 
         OHProtectorPass() : ModulePass(ID) {}
@@ -58,9 +63,10 @@ namespace {
         void getAnalysisUsage(AnalysisUsage &AU) const override;
 
         bool shouldProtect(Instruction *instruction);
-        void insertGlobals(Module &M, int numHashVars);
+        void insertGlobals(Module &M, int numHashVariables);
         void insertProtection(IRBuilder<> *builder, vector<Instruction *> instuctions, bool finalRun);
         void insertReportFunction(IRBuilder<> *builder);
+        void insertCheck(IRBuilder<> *builder, Instruction *inst, LLVMContext *ctx, GlobalVariable *global, int id);
         BinaryOperator* generateHashFunction(IRBuilder<> *builder, Value *operandOne, Value *operandTwo);
 
         template<typename T> vector<T *> twistGetPartFromVector(vector<T *> input, double procent);
@@ -81,6 +87,9 @@ namespace {
         if (verbose) {
             putsFunction = M.getOrInsertFunction(PUTSFUNC, FunctionType::get(voidTy, ptrTy, false));
         }
+        Type *argsTypes[3] = {ptrTy, int32Ty, int32Ty};
+        
+        printfFunction = M.getOrInsertFunction(PRINTFFUNC, FunctionType::get(voidTy, ArrayRef<Type *>(argsTypes), false));
 
         srand(time(0));
 
@@ -118,12 +127,71 @@ namespace {
 
         insertProtection(&builder, instToProtect, false);
 
-        vector<Instruction *> instToObfuscatePart = twistGetPartFromVector(instToObfuscate, 0.2);
+        vector<Instruction *> instToObfuscatePart = twistGetPartFromVector(instToObfuscate, obfuscationLevel);
         instToObfuscate.clear();
 
         insertProtection(&builder, instToObfuscatePart, true);
-
+        
+        int checkCounter = 0;
+        int id = 0;
+        
+        while (true) {
+            for (auto &F : M) {
+                if (F.isDeclaration()) {
+                    continue;
+                }
+                
+                for (auto &B : F) {
+                    for (auto &I : B) {
+                        int willProtect = rand() % 42;
+                        if (willProtect < 1) {
+                            if (isa<PHINode>(I) || &(I.getParent()->back()) == &I || I.isTerminator()) { continue; }
+                     
+                            builder.SetInsertPoint(&I);
+                            
+                            GlobalVariable *currentGlobal = globals[checkCounter % numHashVariables];
+                            
+                            do {
+                               
+                                id = rand() % 100000 + (std::numeric_limits<int>::max() - 100001);     
+                          
+                            } while(std::find(ids.begin(), ids.end(), id) != ids.end());
+                            
+                            ids.push_back(id);
+                        
+                            insertCheck(&builder, &I, &ctx, currentGlobal, id);
+                            
+                            checkCounter++;
+                            
+                            if (checkCounter >= numHashVariables * checksPerHashVariable) {
+                                goto end;
+                            }
+                            
+                            goto skipBlock;
+                        }
+                    }
+                    skipBlock:;
+                }
+            }
+        }
+        end:
+        
         return true;
+    }
+    
+    void OHProtectorPass::insertCheck(IRBuilder<> *builder, Instruction *inst, LLVMContext *ctx, GlobalVariable *global, int id) {
+        LoadInst *loadGlobal = builder->CreateLoad(global);
+        Value *idValue = builder->getInt32(id);
+        Value *format = builder->CreateGlobalStringPtr("\n%d,%d\n");
+        vector<Value *> args = {format, idValue, loadGlobal};
+        builder->CreateCall(printfFunction, args);
+        
+        Value *cmp = builder->CreateICmpEQ(loadGlobal, idValue);
+        TerminatorInst *reportBlock = SplitBlockAndInsertIfThen(cmp, inst, false, nullptr, nullptr);
+        
+		
+        builder->SetInsertPoint(reportBlock);
+        insertReportFunction(builder); 
     }
 
     void OHProtectorPass::insertProtection(IRBuilder<> *builder, vector<Instruction *> instuctions, bool finalRun) {
@@ -195,8 +263,8 @@ namespace {
         }
     }
 
-    void OHProtectorPass::insertGlobals(Module &M, int numHashVars) {
-        for (int i = 0; i < numHashVars; i++) {
+    void OHProtectorPass::insertGlobals(Module &M, int numHashVariables) {
+        for (int i = 0; i < numHashVariables; i++) {
             GlobalVariable *global = new GlobalVariable(M, int32Ty, false, GlobalValue::CommonLinkage,
                                                         0, "veryglobalmuchsecure");
             global->setAlignment(4);
@@ -256,11 +324,13 @@ namespace {
         Json::Value config = parseJSONFromFile(fileName); // Parse config file
 
         numHashVariables = config["hashVariables"].asInt();
+        checksPerHashVariable = config["checksPerHashVariable"].asInt();
+        obfuscationLevel = config["obfuscationLevel"].asDouble();
         verbose = config["verbose"].asBool();
-
-        if (numHashVariables < 1 || numHashVariables > 99) {
-            errs() << ERROR << "Not initialised correctly! Number of hash variables"
-                            << "should be between 1 and 99!\n";
+        
+        if (numHashVariables < 1 || numHashVariables > 99 || 
+            checksPerHashVariable <= 0 || obfuscationLevel < 0 || obfuscationLevel > 1) {
+            errs() << ERROR << "Not initialised correctly!\n";
             exit(1);
         }
     }
