@@ -111,7 +111,9 @@ namespace {
 
         insertGlobals(M, numHashVariables);
 
-        // Save all input independent instructions which has to be protected
+        // Save all input independent instructions which have to be protected
+        // Inserting directly in this iteration would result in an endless loop since each hash function
+        // insert would add loads, stores and add that would be protected afterwards adding the same again
         for (auto &F : M) {
             // No input dependency info for declarations
             if (F.isDeclaration()) {
@@ -120,6 +122,7 @@ namespace {
 
             for (auto &B : F) {
                 for (auto &I : B) {
+                    // Only add instructions that should be protected (Load/Store/ICmp/Add/Sub) and that are not input dependent
                     if (shouldProtect(&I) && !input_dependency_info.isInputDependent(&I)) {
                         instToProtect.push_back(&I);
                     }
@@ -127,13 +130,17 @@ namespace {
             }
         }
 
+        // Add hash functions to all instructions above
         insertProtection(&builder, instToProtect, false);
 
+        // All added instructions are added to the vector instToObfuscate, the user can specify a percantage of those that should be protected additionally
+        // Therefore the vector is randomly shuffled and protected
         vector<Instruction *> instToObfuscatePart = twistGetPartFromVector(instToObfuscate, obfuscationLevel);
         instToObfuscate.clear();
 
         insertProtection(&builder, instToObfuscatePart, true);
 
+        // Insert asserts at random positions
         insertGuards(M, &builder);
 
         return true;
@@ -150,6 +157,7 @@ namespace {
 
                 for (auto &B : F) {
                     for (auto &I : B) {
+                        // PHINode Instructions and the back of a block or terminators can not be used to split blocks which is done during checker insertion
                         if (!isa<PHINode>(I) && &I != &(I.getParent()->back()) && !I.isTerminator() && shouldInsertGuard()) {
                             builder->SetInsertPoint(&I);
 
@@ -165,7 +173,7 @@ namespace {
                                 return;
                             }
 
-                            // Since iterator get invalidated skip the rest of this basic block
+                            // Since iterator get invalidated (SplitBlockAndInsertIfThen) skip the rest of this basic block
                             break;
                         }
                     }
@@ -184,6 +192,7 @@ namespace {
         builder->CreateCall(printfFunction, args);
 
         // Creates and injects assert
+        // SplitBlockAndInsertIfThen invalidates the iterator this has to be considered while inserting the checkers
         Value *cmp = builder->CreateICmpEQ(loadGlobal, idValue);
         TerminatorInst *reportBlock = SplitBlockAndInsertIfThen(cmp, inst, false, nullptr, nullptr);
 
@@ -203,6 +212,7 @@ namespace {
         // For all instructions which will be protected
         for (auto *I : instuctions) {
             builder->SetInsertPoint(I->getNextNode());
+            // load a global variable that can be
             currentGlobal = globals[globalsIndex];
 
             loadGlobal = builder->CreateLoad(currentGlobal);
@@ -214,6 +224,7 @@ namespace {
                         continue;
                     }
 
+                    // The value that has to be loaded is hashed
                     toCast = loadInst;
                     break;
                 }
@@ -223,10 +234,12 @@ namespace {
                         continue;
                     }
 
+                    // The value that has to be stored is hashed
                     toCast = builder->CreateLoad(storeInst->getPointerOperand());
                     break;
                 }
                 case Instruction::ICmp: {
+                    // The result of the comparison is hashed
                     toCast = dyn_cast<ICmpInst>(I);
                     break;
                 }
@@ -234,13 +247,14 @@ namespace {
                     Value *firstOperand = I->getOperand(0);
                     Value *secondOperand = I->getOperand(1);
 
+                    // An Additional Hash function is added since both operands should be hashed
                     toCast = generateHashFunction(builder, firstOperand, secondOperand);
                     break;
                 }
                 default:
                     errs() << ERROR << "Instruction type cannot be protected\n";
                     I->dump();
-                    exit(1); // All the defined instruction has to be protected!
+                    exit(1); // All defined instructions have to be protected!
             }
             
             Value *alloc = builder->CreateAlloca(int32Ty);
@@ -271,6 +285,7 @@ namespace {
 
             globalsIndex++;
             if (globalsIndex >= globals.size()) {
+                // shuffle all global variables to insert them randomly
                 globalsIndex = 0;
 
                 std::shuffle(globals.begin(), globals.end(), twister);
@@ -312,7 +327,7 @@ namespace {
 
     BinaryOperator* OHProtectorPass::generateHashFunction(IRBuilder<> *builder, Value *operandOne, Value *operandTwo) {
         int randNum = rand() % 2;
-
+        // randomly add an Addition or a XOR as hash function
         if (randNum == 0) {
             return dyn_cast<BinaryOperator>(builder->CreateAdd(operandOne, operandTwo));
         }
@@ -322,7 +337,7 @@ namespace {
 
     int OHProtectorPass::generateHashVariableID() {
         int generatedID;
-
+        // creates a variable ID that can be used to find a checker for patching hash variables
         do {
             generatedID = rand() % 100000 + (std::numeric_limits<int>::max() - 100001);
         } while(std::find(ids.begin(), ids.end(), generatedID) != ids.end()); // unique
@@ -341,6 +356,7 @@ namespace {
 
     template<typename T>
     vector<T *> OHProtectorPass::twistGetPartFromVector(vector<T *> input, double percent) {
+        // randomly shuffles a vetor and returns the first percentage of it
         std::mt19937 twister(rd());
         std::shuffle(input.begin(), input.end(), twister);
 
