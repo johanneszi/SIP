@@ -58,7 +58,7 @@ exitIfFail $?
 llc-3.9 -filetype=obj "${build}${cfile}-inst.bc"
 exitIfFail $?
 
-g++ -rdynamic "${build}${cfile}-inst.o" -o "${build}${cfile}-rewritten"
+clang-3.9 "${build}${cfile}-inst.o" -o "${build}${cfile}-rewritten"
 exitIfFail $?
 
 ./"${build}${cfile}-rewritten" |& tee $outputFile

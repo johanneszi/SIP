@@ -242,11 +242,25 @@ namespace {
                     I->dump();
                     exit(1); // All the defined instruction has to be protected!
             }
-
+            
+            Value *alloc = builder->CreateAlloca(int32Ty);
             Value *casted = builder->CreateIntCast(toCast, int32Ty, false);
-            BinaryOperator *hash = generateHashFunction(builder, casted, loadGlobal);
+            builder->CreateStore(casted, alloc);
+            LoadInst *loadResult = builder->CreateLoad(alloc);
+            BinaryOperator *hash = generateHashFunction(builder, loadResult, loadGlobal);
             StoreInst *storeGlobal = builder->CreateStore(hash, currentGlobal);
-
+           
+            if (I->getOpcode() == Instruction::ICmp) {
+                LoadInst *loadResult = builder->CreateLoad(alloc);
+                
+                Instruction *nextBrInst = I;
+                while (nextBrInst->getOpcode() != Instruction::Br) {
+                    nextBrInst = nextBrInst->getNextNode();
+                }
+                 
+                nextBrInst->setOperand(0, builder->CreateICmpNE(loadResult, builder->getInt32(0))); 
+            }
+            
             // Save inserted protection instruction to be protected in
             // one last run
             if (!finalRun) {
