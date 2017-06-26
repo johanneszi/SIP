@@ -76,7 +76,7 @@ void print(char *message) {
 
 int main(int argc, char** argv) {
     printf("3 + 2 = %d\n", add(3, 2));
-    printf("3 - 2 = %ld\n", sub(3, 2));
+    printf("2 - 3 = %ld\n", sub(3, 2));
     printf("3 * 2 = %d\n", mul(3, 2));
     printf("Valid key? %s\n", isValidLicenseKey("veryvalidmuchsecure"));
     printf("max(3, 2, 1) is %d\n\n", max(3, 2, 1));
