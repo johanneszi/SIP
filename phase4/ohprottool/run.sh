@@ -4,6 +4,8 @@ build="build/"
 libs="/usr/local/lib/"
 filename=""
 cfile=""
+outputFile="/tmp/output.data"
+patcher="src/patcher.py"
 
 function usage() {
     echo "usage: run.sh [-f file ]"
@@ -57,4 +59,10 @@ llc-3.9 -filetype=obj "${build}${cfile}-inst.bc"
 exitIfFail $?
 
 g++ -rdynamic "${build}${cfile}-inst.o" -o "${build}${cfile}-rewritten"
+exitIfFail $?
+
+./"${build}${cfile}-rewritten" |& tee $outputFile
+exitIfFail $?
+
+python3 $patcher "${build}${cfile}-rewritten" $outputFile
 exitIfFail $?

@@ -1,12 +1,10 @@
 #include "llvm/Pass.h"
-
 #include "llvm/IR/Function.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Instruction.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/InlineAsm.h"
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
-
 #include "llvm/Support/raw_ostream.h"
 
 #include "input-dependency/InputDependencyAnalysis.h"
@@ -35,7 +33,7 @@ namespace {
                                                            Instruction::ICmp, Instruction::Sub,
                                                            Instruction::Add};
 
-    const static string USAGE = "Specify file containing configuration file!";
+    const static string USAGE = "Specify file containing configuration data!";
     const cl::opt<string> FILENAME("ff", cl::desc(USAGE.c_str()));
 
     struct OHProtectorPass : public ModulePass {
@@ -44,7 +42,7 @@ namespace {
         int numHashVariables = 0;
         int checksPerHashVariable = 0;
         double obfuscationLevel = 0;
-        bool verbose = false;
+        bool debug = false;
 
         Type *ptrTy, *voidTy, *int32Ty;
         Constant *putsFunction = nullptr, *printfFunction;
@@ -52,7 +50,7 @@ namespace {
         vector<Instruction *> instToProtect, instToObfuscate;
         vector<GlobalVariable *> globals;
         vector<int> ids;
-        
+
         std::random_device rd;
 
         OHProtectorPass() : ModulePass(ID) {}
@@ -62,15 +60,18 @@ namespace {
         bool runOnModule(Module &M) override;
         void getAnalysisUsage(AnalysisUsage &AU) const override;
 
-        bool shouldProtect(Instruction *instruction);
         void insertGlobals(Module &M, int numHashVariables);
         void insertProtection(IRBuilder<> *builder, vector<Instruction *> instuctions, bool finalRun);
+        void insertCheck(IRBuilder<> *builder, Instruction *inst, GlobalVariable *global, int id);
+        void insertGuards(Module &M, IRBuilder<> *builder);
         void insertReportFunction(IRBuilder<> *builder);
-        void insertCheck(IRBuilder<> *builder, Instruction *inst, LLVMContext *ctx, GlobalVariable *global, int id);
         BinaryOperator* generateHashFunction(IRBuilder<> *builder, Value *operandOne, Value *operandTwo);
 
-        template<typename T> vector<T *> twistGetPartFromVector(vector<T *> input, double procent);
+        template<typename T> vector<T *> twistGetPartFromVector(vector<T *> input, double percent);
         bool isPtrToPtr(Value *value);
+        int generateHashVariableID();
+        bool shouldProtect(Instruction *instruction);
+        bool shouldInsertGuard();
         Json::Value parseJSONFromFile(string fileName);
         void parseConfiguration(string fileName);
     };
@@ -84,11 +85,12 @@ namespace {
         voidTy = Type::getVoidTy(ctx);
         int32Ty = Type::getInt32Ty(ctx);
 
-        if (verbose) {
+        if (debug) {
             putsFunction = M.getOrInsertFunction(PUTSFUNC, FunctionType::get(voidTy, ptrTy, false));
         }
+
         Type *argsTypes[3] = {ptrTy, int32Ty, int32Ty};
-        
+
         printfFunction = M.getOrInsertFunction(PRINTFFUNC, FunctionType::get(voidTy, ArrayRef<Type *>(argsTypes), false));
 
         srand(time(0));
@@ -131,67 +133,63 @@ namespace {
         instToObfuscate.clear();
 
         insertProtection(&builder, instToObfuscatePart, true);
-        
+
+        insertGuards(M, &builder);
+
+        return true;
+    }
+
+    void OHProtectorPass::insertGuards(Module &M, IRBuilder<> *builder) {
         int checkCounter = 0;
-        int id = 0;
-        
+
         while (true) {
             for (auto &F : M) {
                 if (F.isDeclaration()) {
                     continue;
                 }
-                
+
                 for (auto &B : F) {
                     for (auto &I : B) {
-                        int willProtect = rand() % 42;
-                        if (willProtect < 1) {
-                            if (isa<PHINode>(I) || &(I.getParent()->back()) == &I || I.isTerminator()) { continue; }
-                     
-                            builder.SetInsertPoint(&I);
-                            
+                        if (!isa<PHINode>(I) && &I != &(I.getParent()->back()) && !I.isTerminator() && shouldInsertGuard()) {
+                            builder->SetInsertPoint(&I);
+
                             GlobalVariable *currentGlobal = globals[checkCounter % numHashVariables];
-                            
-                            do {
-                               
-                                id = rand() % 100000 + (std::numeric_limits<int>::max() - 100001);     
-                          
-                            } while(std::find(ids.begin(), ids.end(), id) != ids.end());
-                            
+                            int id = generateHashVariableID();
                             ids.push_back(id);
-                        
-                            insertCheck(&builder, &I, &ctx, currentGlobal, id);
-                            
+
+                            insertCheck(builder, &I, currentGlobal, id);
+
                             checkCounter++;
-                            
+
                             if (checkCounter >= numHashVariables * checksPerHashVariable) {
-                                goto end;
+                                return;
                             }
-                            
-                            goto skipBlock;
+
+                            // Since iterator get invalidated skip the rest of this basic block
+                            break;
                         }
                     }
-                    skipBlock:;
                 }
             }
         }
-        end:
-        
-        return true;
     }
-    
-    void OHProtectorPass::insertCheck(IRBuilder<> *builder, Instruction *inst, LLVMContext *ctx, GlobalVariable *global, int id) {
+
+    void OHProtectorPass::insertCheck(IRBuilder<> *builder, Instruction *inst, GlobalVariable *global, int id) {
+        // Builds a call to printf which prints an ID and
+        // the value of the corresponding hash
         LoadInst *loadGlobal = builder->CreateLoad(global);
         Value *idValue = builder->getInt32(id);
         Value *format = builder->CreateGlobalStringPtr("\n%d,%d\n");
         vector<Value *> args = {format, idValue, loadGlobal};
         builder->CreateCall(printfFunction, args);
-        
+
+        // Creates and injects assert
         Value *cmp = builder->CreateICmpEQ(loadGlobal, idValue);
         TerminatorInst *reportBlock = SplitBlockAndInsertIfThen(cmp, inst, false, nullptr, nullptr);
-        
-		
+
+        // Finally, inserts report function
         builder->SetInsertPoint(reportBlock);
-        insertReportFunction(builder); 
+        insertReportFunction(builder);
     }
 
     void OHProtectorPass::insertProtection(IRBuilder<> *builder, vector<Instruction *> instuctions, bool finalRun) {
@@ -202,6 +200,7 @@ namespace {
         LoadInst *loadGlobal;
         Value *toCast;
 
+        // For all instructions which will be protected
         for (auto *I : instuctions) {
             builder->SetInsertPoint(I->getNextNode());
             currentGlobal = globals[globalsIndex];
@@ -241,13 +240,15 @@ namespace {
                 default:
                     errs() << ERROR << "Instruction type cannot be protected\n";
                     I->dump();
-                    exit(1);
+                    exit(1); // All the defined instruction has to be protected!
             }
 
             Value *casted = builder->CreateIntCast(toCast, int32Ty, false);
             BinaryOperator *hash = generateHashFunction(builder, casted, loadGlobal);
             StoreInst *storeGlobal = builder->CreateStore(hash, currentGlobal);
 
+            // Save inserted protection instruction to be protected in
+            // one last run
             if (!finalRun) {
                 instToObfuscate.push_back(loadGlobal);
                 instToObfuscate.push_back(hash);
@@ -264,9 +265,15 @@ namespace {
     }
 
     void OHProtectorPass::insertGlobals(Module &M, int numHashVariables) {
+        string globalName = "";
+
+        if (debug) {
+            globalName = "veryglobalmuchsecure";
+        }
+
         for (int i = 0; i < numHashVariables; i++) {
             GlobalVariable *global = new GlobalVariable(M, int32Ty, false, GlobalValue::CommonLinkage,
-                                                        0, "veryglobalmuchsecure");
+                                                        0, globalName);
             global->setAlignment(4);
 
             // Constant Definitions
@@ -280,7 +287,7 @@ namespace {
     }
 
     void OHProtectorPass::insertReportFunction(IRBuilder<> *builder) {
-        if (verbose) {
+        if (debug) {
             Value *corruptedString = builder->CreateGlobalStringPtr("Hash corrupted!");
             builder->CreateCall(putsFunction, corruptedString);
         }
@@ -299,18 +306,32 @@ namespace {
         return dyn_cast<BinaryOperator>(builder->CreateXor(operandOne, operandTwo));
     }
 
+    int OHProtectorPass::generateHashVariableID() {
+        int generatedID;
+
+        do {
+            generatedID = rand() % 100000 + (std::numeric_limits<int>::max() - 100001);
+        } while(std::find(ids.begin(), ids.end(), generatedID) != ids.end()); // unique
+
+        return generatedID;
+    }
+
+    bool OHProtectorPass::shouldInsertGuard() {
+        return rand() % 42 < 1;
+    }
+
     bool OHProtectorPass::shouldProtect(Instruction *instruction) {
         unsigned int opCode = instruction->getOpcode();
         return std::find(PROTECTEDINSTRUCTIONS.begin(), PROTECTEDINSTRUCTIONS.end(), opCode) != PROTECTEDINSTRUCTIONS.end();
     }
 
     template<typename T>
-    vector<T *> OHProtectorPass::twistGetPartFromVector(vector<T *> input, double procent) {
+    vector<T *> OHProtectorPass::twistGetPartFromVector(vector<T *> input, double percent) {
         std::mt19937 twister(rd());
         std::shuffle(input.begin(), input.end(), twister);
 
         typename vector<T *>::const_iterator first = input.begin();
-        typename vector<T *>::const_iterator last = input.begin() + int(input.size() * procent);
+        typename vector<T *>::const_iterator last = input.begin() + int(input.size() * percent);
         vector<T *> part(first, last);
 
         return part;
@@ -326,10 +347,12 @@ namespace {
         numHashVariables = config["hashVariables"].asInt();
         checksPerHashVariable = config["checksPerHashVariable"].asInt();
         obfuscationLevel = config["obfuscationLevel"].asDouble();
-        verbose = config["verbose"].asBool();
-        
-        if (numHashVariables < 1 || numHashVariables > 99 || 
-            checksPerHashVariable <= 0 || obfuscationLevel < 0 || obfuscationLevel > 1) {
+        debug = config["debug"].asBool();
+
+        if (numHashVariables < 1 || numHashVariables > 99 ||
+            checksPerHashVariable <= 0 ||
+            obfuscationLevel < 0 || obfuscationLevel > 1) {
+
             errs() << ERROR << "Not initialised correctly!\n";
             exit(1);
         }
