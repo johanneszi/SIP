@@ -34,6 +34,8 @@ def patch(start, hash):
         instruction = Instruction()
 
         if instruction.type == 'call':
+            # Patch the print call that prints the hash value
+            # Instead of adding NOPs add Addtitions or ORs that do nothing
             rando = randNum()
             cmd = ''
             if rando > 50:
@@ -42,6 +44,7 @@ def patch(start, hash):
                 cmd = '\"wa sub edx, ' + str(hex(rando)) + ';or edx, edi\"'
             r2.cmd(cmd)
         elif instruction.type == 'cmp':
+            # Patch the result comparison
             if instruction.size == 6:
                 seek(address + 2)
             elif instruction.size == 7:
@@ -52,12 +55,15 @@ def patch(start, hash):
             hash = unpack("<I", pack(">I", hash))[0]
             r2.cmd('wx 0x{:08x}'.format(hash))
         elif instruction.type == 'cjmp':
+            # Since the correct hash could not be added by the module pass but the program needs to be executed the condition check was added inverse
+            # Therefore the comparision has to be changed
             r2.cmd('wao swap-cjmp')
             break
 
         address += instruction.size
 
 def parse(input):
+    # parse the file that may contain further output to only return IDs and hashes
     result = {}
 
     for line in input:
@@ -74,7 +80,7 @@ def parse(input):
 
 if __name__ == "__main__":
     hashes = []
-
+    # The hash values that have to be patched have to be given comma seperated in an input file
     with open(argv[2], 'r') as f:
         hashes = parse(f.readlines())
 
@@ -82,7 +88,7 @@ if __name__ == "__main__":
 
     r2.cmd('oo+') # Open binary for writing
     r2.cmd('aaa') # Analyse
-
+    # Search all IDs and patch the variables
     for (id, hash) in hashes.items():
         address = int(r2.cmdj('/aj mov esi, ' + str(hex(id)))[0]['offset'])
         patch(address, hash)
