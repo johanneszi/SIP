@@ -34,6 +34,7 @@
 SGX_SDK ?= /opt/intel/sgxsdk
 SGX_MODE ?= SIM
 SGX_ARCH ?= x64
+GX_DEBUG ?= 1
 
 ifeq ($(shell getconf LONG_BIT), 32)
 	SGX_ARCH := x86
@@ -114,7 +115,7 @@ else
 endif
 Crypto_Library_Name := sgx_tcrypto
 
-Enclave_C_Files := Enclave/Enclave.c Enclave/Sealing/Sealing.c
+Enclave_C_Files := Enclave/Enclave.c
 Enclave_Include_Paths := -IEnclave -I$(SGX_SDK)/include -I$(SGX_SDK)/include/tlibc -I$(SGX_SDK)/include/stlport
 
 Enclave_C_Flags := $(SGX_COMMON_CFLAGS) -nostdinc -fvisibility=hidden -fpie -fstack-protector $(Enclave_Include_Paths)

@@ -1,5 +1,6 @@
 #include <string.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include "sgx_urts.h"
 #include "sgx_utils.h"
 
@@ -13,7 +14,7 @@
 
 /* Check error conditions for loading enclave */
 void print_error_message(sgx_status_t ret) {
-    printf("SGX error code: %d\n", ret);
+    fprintf(stderr, "SGX error code: %d\n", ret);
 }
 
 /* Initialize the enclave:
@@ -70,13 +71,10 @@ int initialize_enclave(sgx_enclave_id_t* eid, const char* token_path, const char
     return 0;
 }
 
-int is_ecall_successful(sgx_status_t sgx_status, const char* err_msg,
-        sgx_status_t ecall_return_value) {
-    if (sgx_status != SGX_SUCCESS || ecall_return_value != SGX_SUCCESS) {
-        printf("%s\n", err_msg);
+void check_sgx_status(sgx_status_t sgx_status, const char* err_msg) {
+    if (sgx_status != SGX_SUCCESS) {
+        fprintf(stderr, "%s\n", err_msg);
         print_error_message(sgx_status);
-        print_error_message(ecall_return_value);
-        return 0;
+        abort();
     }
-    return 1;
 }

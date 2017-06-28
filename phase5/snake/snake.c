@@ -47,8 +47,8 @@ unsigned int usec_delay = DEFAULT_DELAY;
 /* Global EID shared by multiple threads */
 sgx_enclave_id_t global_eid = 0;
 
-void ocall_print(const char* str) {
-    printf("%s\n", str);
+void ocall_print(const char* str, int input) {
+    printf("[%d] %s\n", input, str);
 }
 
 int sigsetup(int signo, void( * callback)(int)) {
@@ -105,7 +105,11 @@ void show_score(screen_t * screen) {
 
     textcolor(LIGHTMAGENTA);
     gotoxy(61, MAXROW + 2);
-    printf("High Score: %05d", screen->high_score);
+    int high_score;
+    sgx_status_t status = get_high_score(global_eid, &high_score);
+    check_sgx_status(status, "Get High score failed!");
+
+    printf("High Score: %05d", high_score);
 }
 
 void draw_line(int col, int row) {
@@ -342,18 +346,57 @@ int eat_gold(snake_t *snake, screen_t *screen) {
     return screen->gold;
 }
 
+void save_high_score() {
+    size_t sealed_size = sizeof(sgx_sealed_data_t) + sizeof(int);
+    uint8_t *sealed_high_score = (uint8_t*) malloc(sealed_size);
+    memset(sealed_high_score, 0, sealed_size);
+    sgx_status_t status = dump_high_score(global_eid, sealed_high_score, sealed_size);
+    check_sgx_status(status, "Dump High score failed!");
+
+    FILE *high_score_file = fopen("secure.data", "wb");
+    if (high_score_file == NULL || fwrite(sealed_high_score, sealed_size, 1, high_score_file) != 1) {
+        fprintf(stderr, "Could not save high score!\n");
+    }
+
+    free(sealed_high_score);
+
+    if (high_score_file != NULL)
+        fclose(high_score_file);
+}
+
+void load_old_high_score() {
+    size_t sealed_size = sizeof(sgx_sealed_data_t) + sizeof(int);
+    uint8_t* sealed_data = (uint8_t*) malloc(sealed_size);
+
+    FILE *high_score_file = fopen("secure.data", "rb");
+
+    if (high_score_file == NULL || fread(sealed_data, sealed_size, 1, high_score_file) == 0) {
+        free(sealed_data);
+        sealed_data = NULL;
+        fprintf(stderr, "Could not read old high score! Is the file even there?\n");
+    }
+
+    sgx_status_t status = load_high_score(global_eid, sealed_data, sealed_size);
+    check_sgx_status(status, "Load High score failed!");
+
+    free(sealed_data);
+
+    if (high_score_file != NULL)
+        fclose(high_score_file);
+}
+
 int main(void) {
     char keypress;
     snake_t snake;
     screen_t screen;
     char keys[NUM_KEYS] = DEFAULT_KEYS;
 
-    screen.high_score = 0;
-
     if (initialize_enclave(&global_eid, "enclave.token", "enclave.signed.so") < 0) {
         fprintf(stderr, "Fail to initialize enclave.\n");
         return 1;
     }
+
+    load_old_high_score();
 
     if (WEXITSTATUS(system("stty cbreak -echo stop u"))) {
         fprintf(stderr, "Failed setting up the screen, is 'stty' missing?\n");
@@ -378,24 +421,19 @@ int main(void) {
 
             /* keeps cursor flashing in one place instead of following snake */
             gotoxy(1, 1);
-            int ptr;
-            sgx_status_t status = collision(global_eid, &ptr, &snake, &screen);
-            if (status != SGX_SUCCESS) {
-                fprintf(stderr, "noob");
-                abort();
-            }
+            int collided;
+            sgx_status_t status = collision(global_eid, &collided, &snake, &screen);
+            check_sgx_status(status, "Calling collision failed!");
 
-            if (ptr) {
+            if (collided) {
                 keypress = keys[QUIT];
                 break;
             } else {
-            	status = collide_gold(global_eid, &ptr, &snake, &screen);
-		if (status != SGX_SUCCESS) {
-                   fprintf(stderr, "noob");
-                   abort();
-                }
+                int gold_eaten;
+            	status = collide_gold(global_eid, &gold_eaten, &snake, &screen);
+	        	check_sgx_status(status, "Calling collide_gold failed!");
 
-                if (ptr) {
+                if (gold_eaten) {
                     /* If no gold left after consuming this one... */
                     if (!eat_gold(&snake, &screen)) {
                         /* ... then go to next level. */
@@ -405,8 +443,7 @@ int main(void) {
 
                 show_score(&screen);
             }
-        }
-        while (keypress != keys[QUIT]);
+        } while (keypress != keys[QUIT]);
 
         show_score( & screen);
 
@@ -420,10 +457,10 @@ int main(void) {
 
         do {
             keypress = getchar();
-        }
-        while ((keypress != 'y') && (keypress != 'n'));
-    }
-    while (keypress == 'y');
+        } while ((keypress != 'y') && (keypress != 'n'));
+    } while (keypress == 'y');
+
+    save_high_score();
 
     clrscr();
 
