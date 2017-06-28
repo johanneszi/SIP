@@ -1,0 +1,15 @@
+enclave {
+    from "Sealing/Sealing.edl" import *;
+    include "/home/team6/snake/snake.h"
+
+    trusted {
+        /* define ECALLs here. */
+        public int collide_gold([in] snake_t *snake, [in] screen_t *screen); 
+	    public int collision([in] snake_t *snake, [in] screen_t *screen);
+    };
+
+    untrusted {
+        /* define OCALLs here. */
+        void ocall_print([in, string]const char* str);
+    };
+};
