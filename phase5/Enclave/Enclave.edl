@@ -1,0 +1,25 @@
+enclave {
+    include "/home/team6/SIP/phase5/snake/snakeApp/snake.h"
+    include "sgx_tseal.h"
+
+    trusted {
+        public int collide_gold([in] snake_t *snake, [in] screen_t *screen); 
+	public int collision([in] snake_t *snake, [in] screen_t *screen);
+
+        public void load_high_score([in, size=sealed_size] uint8_t *sealed_data, size_t sealed_size);
+        public void dump_high_score([out, size=sealed_size] uint8_t *sealed_data, size_t sealed_size);
+        public int get_high_score();
+
+        public int get_score();
+        public void update_score([in] screen_t *screen);
+        public void reset_score();
+
+        public int get_length();
+        public void increase_length();
+        public void reset_length();
+    };
+
+    untrusted {
+        void ocall_print([in, string]const char* str, int input);
+    };
+};
