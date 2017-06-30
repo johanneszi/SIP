@@ -59,6 +59,7 @@ void get_current_dir(char *current_dir, size_t size) {
 
     if (readlink("/proc/self/exe", current_dir, size - 1) == -1) {
         fprintf(stderr, "Could not get current directory!\n");
+        return;
     }
 
     int end = size - 1;
@@ -74,7 +75,7 @@ void relative_path_to(const char *file, char *path, size_t size) {
     strncat(path, file, size - strlen(current_dir) - 1);
 }
 
-int sigsetup(int signo, void( * callback)(int)) {
+int sigsetup(int signo, void(*callback)(int)) {
     struct sigaction action;
 
     sigemptyset( & action.sa_mask);
@@ -91,7 +92,7 @@ int sigsetup(int signo, void( * callback)(int)) {
         #endif
     }
 
-    return sigaction(signo, & action, NULL);
+    return sigaction(signo, &action, NULL);
 }
 
 void sig_handler(int signal __attribute__((unused))) {
@@ -113,7 +114,7 @@ void alarm_handler(int signal __attribute__((unused))) {
     setitimer(ITIMER_REAL, & val, NULL);
 }
 
-void show_score(screen_t * screen) {
+void show_score(screen_t *screen) {
     textcolor(LIGHTCYAN);
     gotoxy(3, MAXROW + 2);
     printf("Level: %05d", screen->level);
@@ -155,7 +156,7 @@ void draw_line(int col, int row) {
 /* If level==0 then just move on to the next level
  * if level==1 restart game
  * Otherwise start game at that level. */
-void setup_level(screen_t * screen, snake_t * snake, int level) {
+void setup_level(screen_t *screen, snake_t *snake, int level) {
     int i, row, col;
 
     srand((unsigned int) time(NULL));
@@ -246,7 +247,7 @@ void setup_level(screen_t * screen, snake_t * snake, int level) {
     printf("[ Micro Snake v%s ]", VERSION);
 }
 
-void move(snake_t * snake, char keys[], char key) {
+void move(snake_t *snake, char keys[], char key) {
     int i;
     direction_t prev = snake->dir;
 
@@ -352,7 +353,7 @@ void move(snake_t * snake, char keys[], char key) {
 }
 
 int eat_gold(snake_t *snake, screen_t *screen) {
-    snake_segment_t * head = & snake->body[snake->len - 1];
+    snake_segment_t *head = & snake->body[snake->len - 1];
 
     /* We're called after collide_object() so we know it's
      * a piece of gold at this position.  Eat it up! */

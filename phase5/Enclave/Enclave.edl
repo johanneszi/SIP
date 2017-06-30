@@ -1,5 +1,5 @@
 enclave {
-    include "/home/team6/SIP/phase5/snake/snakeApp/snake.h"
+    include "/home/team6/SIP/phase5/snakeApp/snake.h"
     include "sgx_tseal.h"
 
     trusted {

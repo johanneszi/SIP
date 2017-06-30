@@ -62,7 +62,7 @@ void load_high_score(uint8_t* sealed_data, size_t sealed_size) {
     if (status != SGX_SUCCESS) {
         ocall_print("Loading not successful!", 0);
         return;
-    }	
+    }
 
     ocall_print("Loaded High Score", unsealed);
     high_score = unsealed;
@@ -70,7 +70,7 @@ void load_high_score(uint8_t* sealed_data, size_t sealed_size) {
 
 void dump_high_score(uint8_t *sealed_data, size_t sealed_size) {
     sgx_status_t status = sgx_seal_data(0, NULL, sizeof(high_score), (uint8_t*)&high_score,
-                                        sealed_size, (sgx_sealed_data_t*)sealed_data);
+                                        sealed_size, (sgx_sealed_data_t*) sealed_data);
 
     if (status != SGX_SUCCESS) {
         ocall_print("Storing not successful!", 0);
@@ -93,18 +93,18 @@ void update_score (screen_t *screen) {
     }
 }
 
-void reset_score(){
+void reset_score() {
     score = 0;
 }
 
-int get_length(){
+int get_length() {
     return length;
 }
 
-void increase_length(){
+void increase_length() {
     length++;
 }
 
-void reset_length(){
+void reset_length() {
     length = 4;
 }

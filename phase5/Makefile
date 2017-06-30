@@ -78,7 +78,7 @@ else
 	Urts_Library_Name := sgx_urts
 endif
 
-App_C_Files := snakeApp/snake.c snakeApp/sgx_utils/sgx_utils.c 
+App_C_Files := snakeApp/snake.c snakeApp/sgx_utils/sgx_utils.c
 App_Include_Paths := -IsnakeApp -I$(BUILDENCLAVE) -I$(SGX_SDK)/include
 
 App_C_Flags := $(SGX_COMMON_CFLAGS) -fPIC -Wno-attributes $(App_Include_Paths)
@@ -95,7 +95,7 @@ else
         App_C_Flags += -DNDEBUG -UEDEBUG -UDEBUG
 endif
 
-App_Link_Flags := $(SGX_COMMON_CFLAGS) -L$(SGX_LIBRARY_PATH) -l$(Urts_Library_Name) -lpthread 
+App_Link_Flags := $(SGX_COMMON_CFLAGS) -L$(SGX_LIBRARY_PATH) -l$(Urts_Library_Name) -lpthread
 
 ifneq ($(SGX_MODE), HW)
 	App_Link_Flags += -lsgx_uae_service_sim
