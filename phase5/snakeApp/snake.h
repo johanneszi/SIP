@@ -44,18 +44,14 @@ typedef struct
 
 typedef struct
 {
-   unsigned int    speed;
    direction_t     dir;
 
-   int             len;
    snake_segment_t body[100];
 } snake_t;
 
 typedef struct
 {
    int level;
-   int score;
-   int high_score;
    int gold;
    int obstacles;
 

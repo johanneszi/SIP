@@ -11,12 +11,17 @@ enclave {
         public int get_high_score();
 
         public int get_score();
-        public void update_score([in] screen_t *screen);
+        public void update_score_gold(int obstacles);
+        public void update_score_level(int level);
         public void reset_score();
 
         public int get_length();
         public void increase_length();
-        public void reset_length();
+        public void set_length(int level);
+
+        public int get_speed();
+        public void reset_speed();
+        public void increase_speed(int level);
     };
 
     untrusted {

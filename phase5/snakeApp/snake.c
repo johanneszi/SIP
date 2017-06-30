@@ -109,9 +109,14 @@ void alarm_handler(int signal __attribute__((unused))) {
     }
 
     val.it_value.tv_sec = 0;
-    val.it_value.tv_usec = usec_delay;
 
-    setitimer(ITIMER_REAL, & val, NULL);
+    int speed;
+    sgx_status_t status = get_speed(global_eid, &speed);
+    check_sgx_status(status, "Get speed failed!");
+
+    val.it_value.tv_usec = speed;
+
+    setitimer(ITIMER_REAL, &val, NULL);
 }
 
 void show_score(screen_t *screen) {
@@ -125,12 +130,17 @@ void show_score(screen_t *screen) {
 
     textcolor(LIGHTGREEN);
     gotoxy(43, MAXROW + 2);
-    printf("Score: %05d", screen->score);
+
+    int score;
+    sgx_status_t status = get_score(global_eid, &score);
+    check_sgx_status(status, "Get score failed!");
+    printf("Score: %05d", score);
 
     textcolor(LIGHTMAGENTA);
     gotoxy(61, MAXROW + 2);
+
     int high_score;
-    sgx_status_t status = get_high_score(global_eid, &high_score);
+    status = get_high_score(global_eid, &high_score);
     check_sgx_status(status, "Get High score failed!");
 
     printf("High Score: %05d", high_score);
@@ -163,25 +173,28 @@ void setup_level(screen_t *screen, snake_t *snake, int level) {
 
     /* Initialize on (re)start */
     if (1 == level) {
-        screen->score = 0;
+        sgx_status_t status = reset_score(global_eid);
+        check_sgx_status(status, "Reset score failed!");
+
         screen->obstacles = 4;
         screen->level = 1;
-        snake->speed = 14;
         snake->dir = RIGHT;
     } else {
-        screen->score += screen->level * 1000;
+        sgx_status_t status = update_score_level(global_eid, screen->level);
+        check_sgx_status(status, "Update score failed!");
+
         screen->obstacles += 2;
         screen->level++; /* add to obstacles */
-
-        if ((screen->level % 5 == 0) && (snake->speed > 1)) {
-            snake->speed--; /* increase snake->speed every 5 levels */
-        }
     }
 
     /* Set up global variables for new level */
     screen->gold = 0;
-    snake->len = level + 4;
-    usec_delay = DEFAULT_DELAY - level * 10000;
+
+    sgx_status_t status = set_length(global_eid, level);
+    check_sgx_status(status, "Could not set snake's length!");
+
+    status = increase_speed(global_eid, screen->level);
+    check_sgx_status(status, "Increase speed failed!");
 
     /* Fill grid with blanks */
     for (row = 0; row < MAXROW; row++) {
@@ -208,7 +221,11 @@ void setup_level(screen_t *screen, snake_t *snake, int level) {
     }
 
     /* Create snake array of length snake->len */
-    for (i = 0; i < snake->len; i++) {
+    int length;
+    status = get_length(global_eid, &length);
+    check_sgx_status(status, "Could not load length");
+
+    for (i = 0; i < length; i++) {
         snake->body[i].row = START_ROW;
         snake->body[i].col = snake->dir == LEFT ? START_COL - i : START_COL + i;
     }
@@ -303,25 +320,29 @@ void move(snake_t *snake, char keys[], char key) {
         }
     }
 
+    int length;
+    sgx_status_t status = get_length(global_eid, &length);
+    check_sgx_status(status, "Could not load length");
+
     switch (snake->dir) {
     case LEFT:
-        snake->body[snake->len].row = snake->body[snake->len - 1].row;
-        snake->body[snake->len].col = snake->body[snake->len - 1].col - 1;
+        snake->body[length].row = snake->body[length - 1].row;
+        snake->body[length].col = snake->body[length - 1].col - 1;
         break;
 
     case RIGHT:
-        snake->body[snake->len].row = snake->body[snake->len - 1].row;
-        snake->body[snake->len].col = snake->body[snake->len - 1].col + 1;
+        snake->body[length].row = snake->body[length - 1].row;
+        snake->body[length].col = snake->body[length - 1].col + 1;
         break;
 
     case UP:
-        snake->body[snake->len].row = snake->body[snake->len - 1].row - 1;
-        snake->body[snake->len].col = snake->body[snake->len - 1].col;
+        snake->body[length].row = snake->body[length - 1].row - 1;
+        snake->body[length].col = snake->body[length - 1].col;
         break;
 
     case DOWN:
-        snake->body[snake->len].row = snake->body[snake->len - 1].row + 1;
-        snake->body[snake->len].col = snake->body[snake->len - 1].col;
+        snake->body[length].row = snake->body[length- 1].row + 1;
+        snake->body[length].col = snake->body[length - 1].col;
         break;
 
     default:
@@ -335,37 +356,41 @@ void move(snake_t *snake, char keys[], char key) {
     puts(" ");
 
     /* ... and remove it from the array */
-    for (i = 1; i <= snake->len; i++) {
+    for (i = 1; i <= length; i++) {
         snake->body[i - 1] = snake->body[i];
     }
 
     /* Display snake in yellow */
     textbackground(YELLOW);
-    for (i = 0; i < snake->len; i++) {
+    for (i = 0; i < length; i++) {
         gotoxy(snake->body[i].col + 1, snake->body[i].row + 1);
         puts(" ");
     }
     textattr(RESETATTR);
     #ifdef DEBUG
     gotoxy(71, 1);
-    printf("(%02d,%02d)", snake->body[snake->len - 1].col, snake->body[snake->len - 1].row);
+    printf("(%02d,%02d)", snake->body[length - 1].col, snake->body[length - 1].row);
     #endif
 }
 
 int eat_gold(snake_t *snake, screen_t *screen) {
-    snake_segment_t *head = & snake->body[snake->len - 1];
+    int length;
+    sgx_status_t status = get_length(global_eid, &length);
+    check_sgx_status(status, "Could not load length");
+
+    snake_segment_t *head = & snake->body[length - 1];
 
     /* We're called after collide_object() so we know it's
      * a piece of gold at this position.  Eat it up! */
     screen->grid[head->row - 1][head->col - 1] = ' ';
 
     screen->gold--;
-    screen->score += snake->len * screen->obstacles;
-    snake->len++;
 
-    if (screen->score > screen->high_score) {
-        screen->high_score = screen->score; /* New high score! */
-    }
+    status = update_score_gold(global_eid, screen->obstacles);
+    check_sgx_status(status, "Update score failed!");
+
+    status = increase_length(global_eid);
+    check_sgx_status(status, "Could not increase length");
 
     return screen->gold;
 }
@@ -483,7 +508,7 @@ int main(void) {
             }
         } while (keypress != keys[QUIT]);
 
-        show_score( & screen);
+        show_score(&screen);
 
         gotoxy(32, 6);
         textcolor(LIGHTRED);

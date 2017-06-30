@@ -3,9 +3,10 @@
 int high_score = 0;
 int score = 0;
 int length = 4;
+int speed = DEFAULT_DELAY;
 
 int collide_walls(snake_t *snake) {
-    snake_segment_t *head = &snake->body[snake->len - 1];
+    snake_segment_t *head = &snake->body[length - 1];
 
     if ((head->row > MAXROW) || (head->row < 1) ||
         (head->col > MAXCOL) || (head->col < 1)) {
@@ -16,7 +17,7 @@ int collide_walls(snake_t *snake) {
 }
 
 int collide_object(snake_t *snake, screen_t *screen, char object) {
-    snake_segment_t *head = &snake->body[snake->len - 1];
+    snake_segment_t *head = &snake->body[length - 1];
 
     if (screen->grid[head->row - 1][head->col - 1] == object) {
         return 1;
@@ -31,10 +32,10 @@ int collide_gold(snake_t *snake, screen_t *screen) {
 
 int collide_self(snake_t *snake) {
     int i;
-    snake_segment_t *head = &snake->body[snake->len - 1];
+    snake_segment_t *head = &snake->body[length - 1];
 
-    for (i = 0; i < snake->len - 1; i++) {
-        snake_segment_t *body = & snake->body[i];
+    for (i = 0; i < length - 1; i++) {
+        snake_segment_t *body = &snake->body[i];
 
         if (head->row == body->row && head->col == body->col) {
             return 1;
@@ -79,15 +80,22 @@ void dump_high_score(uint8_t *sealed_data, size_t sealed_size) {
 }
 
 int get_high_score() {
-    return high_score += 20;
+    return high_score;
 }
 
 int get_score() {
     return score;
 }
 
-void update_score (screen_t *screen) {
-    score += length * screen->obstacles;
+void update_score_gold(int obstacles) {
+    score += length * obstacles;
+    if (score > high_score) {
+        high_score = score;
+    }
+}
+
+void update_score_level(int level) {
+    score += level * 1000;
     if (score > high_score) {
         high_score = score;
     }
@@ -105,6 +113,20 @@ void increase_length() {
     length++;
 }
 
-void reset_length() {
-    length = 4;
+void set_length(int level) {
+    length = level + 4;
+}
+
+void reset_speed() {
+    speed = 200000;
+}
+
+void increase_speed(int level){
+    if(level * 10000 > DEFAULT_DELAY){
+        speed = DEFAULT_DELAY - level * 10000;
+    }
+}
+
+int get_speed(){
+    return speed;
 }
