@@ -137,7 +137,6 @@ Enclave_Link_Flags := $(SGX_COMMON_CFLAGS) -Wl,--no-undefined -nostdlib -nodefau
 	-Wl,-Bstatic -Wl,-Bsymbolic -Wl,--no-undefined \
 	-Wl,-pie,-eenclave_entry -Wl,--export-dynamic  \
 	-Wl,--defsym,__ImageBase=0 \
-	#-Wl,--version-script=Enclave/Enclave.lds
 
 Enclave_C_Objects := $(Enclave_C_Files:.c=.o)
 Enclave_C_Objects := $(addprefix $(BUILD), $(Enclave_C_Objects))
@@ -191,8 +190,8 @@ endif
 endif
 
 directories:
-	@mkdir -p build/sgx_utils
-	@mkdir -p build/Enclave
+	@mkdir -p $(BUILD)sgx_utils
+	@mkdir -p $(BUILD)Enclave
 
 run: all
 ifneq ($(Build_Mode), HW_RELEASE)
@@ -220,7 +219,6 @@ $(App_Name): $(BUILDENCLAVE)Enclave_u.o $(App_C_Objects)
 
 .config_$(Build_Mode)_$(SGX_ARCH):
 	@rm -f .config_* $(App_Name) $(Enclave_Name) $(Signed_Enclave_Name) $(App_C_Objects) $(BUILDENCLAVE)Enclave_u.* $(Enclave_C_Objects) $(BUILDENCLAVE)Enclave_t.*
-	@touch .config_$(Build_Mode)_$(SGX_ARCH)
 
 ######## Enclave Objects ########
 
