@@ -35,6 +35,12 @@
 #define DEFAULT_DELAY 200000
 #define DEFAULT_KEYS  {'o', 'p', 'a', 'z', 'f', 'j', 'q'}
 
+#ifdef DEBUG
+#define DBG(fmt, args...) fprintf(stderr, fmt, ##args)
+#else
+#define DBG(fmt, args...)
+#endif
+
 typedef enum { LEFT=0, RIGHT, UP, DOWN, LEFT_TURN, RIGHT_TURN, QUIT, NUM_KEYS } direction_t;
 
 typedef struct

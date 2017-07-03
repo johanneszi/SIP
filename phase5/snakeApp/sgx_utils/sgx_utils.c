@@ -71,6 +71,16 @@ int initialize_enclave(sgx_enclave_id_t* eid, const char* token_path, const char
     return 0;
 }
 
+int destroy_enclave(sgx_enclave_id_t id) {
+    int ret = sgx_destroy_enclave(id);
+    if (ret != SGX_SUCCESS) {
+        print_error_message(ret);
+        return -1;
+    }
+
+    return 0;
+}
+
 void check_sgx_status(sgx_status_t sgx_status, const char* err_msg) {
     if (sgx_status != SGX_SUCCESS) {
         fprintf(stderr, "%s\n", err_msg);

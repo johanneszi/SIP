@@ -36,6 +36,7 @@ SGX_MODE ?= SIM
 SGX_ARCH ?= x64
 SGX_DEBUG ?= 1
 
+APP = snakeApp/
 BUILD = build/
 ENCLAVE = Enclave/
 BUILDENCLAVE = $(BUILD)$(ENCLAVE)
@@ -78,8 +79,8 @@ else
 	Urts_Library_Name := sgx_urts
 endif
 
-App_C_Files := snakeApp/snake.c snakeApp/sgx_utils/sgx_utils.c
-App_Include_Paths := -IsnakeApp -I$(BUILDENCLAVE) -I$(SGX_SDK)/include
+App_C_Files := $(APP)snake.c $(APP)dir_utils.c $(APP)sgx_utils/sgx_utils.c $(APP)sgx_utils/ocalls.c
+App_Include_Paths := -I$(APP) -I$(BUILDENCLAVE) -I$(SGX_SDK)/include
 
 App_C_Flags := $(SGX_COMMON_CFLAGS) -fPIC -Wno-attributes $(App_Include_Paths)
 
@@ -119,10 +120,10 @@ else
 endif
 Crypto_Library_Name := sgx_tcrypto
 
-Enclave_C_Files := $(ENCLAVE)Enclave.c
-Enclave_Include_Paths := -I$(BUILDENCLAVE) -I$(SGX_SDK)/include -I$(SGX_SDK)/include/tlibc -I$(SGX_SDK)/include/stlport
+Enclave_C_Files := $(ENCLAVE)Enclave.c $(ENCLAVE)sgx_stdio.c
+Enclave_Include_Paths := -I$(APP) -I$(ENCLAVE) -I$(BUILDENCLAVE) -I$(SGX_SDK)/include -I$(SGX_SDK)/include/tlibc -I$(SGX_SDK)/include/stlport
 
-Enclave_C_Flags := $(SGX_COMMON_CFLAGS) -nostdinc -fvisibility=hidden -fpie -fstack-protector $(Enclave_Include_Paths)
+Enclave_C_Flags := $(SGX_COMMON_CFLAGS) -nostdinc -fvisibility=hidden -fpie -fstack-protector -fno-builtin-fprintf $(Enclave_Include_Paths)
 
 # To generate a proper enclave, it is recommended to follow below guideline to link the trusted libraries:
 #    1. Link sgx_trts with the `--whole-archive' and `--no-whole-archive' options,
@@ -227,6 +228,10 @@ $(BUILDENCLAVE)Enclave_t.c: $(SGX_EDGER8R) Enclave/Enclave.edl
 	@echo "GEN  =>  $@"
 
 $(BUILDENCLAVE)Enclave_t.o: $(BUILDENCLAVE)Enclave_t.c
+	@$(CC) $(Enclave_C_Flags) -c $< -o $@
+	@echo "CC   <=  $<"
+
+$(BUILDENCLAVE)sgx_stdio.o: $(ENCLAVE)sgx_stdio.c
 	@$(CC) $(Enclave_C_Flags) -c $< -o $@
 	@echo "CC   <=  $<"
 

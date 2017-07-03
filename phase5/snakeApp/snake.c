@@ -22,63 +22,27 @@
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
 #include <sys/time.h>
 #include <sys/wait.h>
 #include <time.h>
-#include <string.h>
 
 #include "Enclave_u.h"
-#include "sgx_urts.h"
 #include "sgx_utils/sgx_utils.h"
 
 #include "conio.h"
+#include "dir_utils.h"
 #include "snake.h"
 
-#define BUFSIZE 512
+#define SECURE_DATA "secure.data"
 #define VERSION "1.0.1"
-
-#ifdef DEBUG
-#define DBG(fmt, args...) fprintf(stderr, fmt, ##args)
-#else
-#define DBG(fmt, args...)
-#endif
-
-/* Default 0.2 sec between snake movement. */
-unsigned int usec_delay = DEFAULT_DELAY;
 
 /* Global EID shared by multiple threads */
 sgx_enclave_id_t global_eid = 0;
 
-void ocall_print(const char* str, int input) {
-    printf("[%d] %s\n", input, str);
-}
-
-void get_current_dir(char *current_dir, size_t size) {
-    memset(current_dir, 0, size);
-
-    if (readlink("/proc/self/exe", current_dir, size - 1) == -1) {
-        fprintf(stderr, "Could not get current directory!\n");
-        return;
-    }
-
-    int end = size - 1;
-    while(end >= 0 && current_dir[end] != '/')
-        current_dir[end--] = '\0';
-}
-
-void relative_path_to(const char *file, char *path, size_t size) {
-    char current_dir[BUFSIZE];
-    get_current_dir(current_dir, sizeof(current_dir));
-
-    strncpy(path, current_dir, size - 1);
-    strncat(path, file, size - strlen(current_dir) - 1);
-}
-
 int sigsetup(int signo, void(*callback)(int)) {
     struct sigaction action;
 
-    sigemptyset( & action.sa_mask);
+    sigemptyset(&action.sa_mask);
     //sigaddset(&action.sa_mask, signo);
     action.sa_flags = 0;
     action.sa_handler = callback;
@@ -112,7 +76,9 @@ void alarm_handler(int signal __attribute__((unused))) {
 
     int speed;
     sgx_status_t status = get_speed(global_eid, &speed);
-    check_sgx_status(status, "Get speed failed!");
+    if (status != SGX_ERROR_INVALID_ENCLAVE_ID) {
+        check_sgx_status(status, "Get speed failed!");
+    }
 
     val.it_value.tv_usec = speed;
 
@@ -183,8 +149,8 @@ void setup_level(screen_t *screen, snake_t *snake, int level) {
         sgx_status_t status = update_score_level(global_eid, screen->level);
         check_sgx_status(status, "Update score failed!");
 
-        screen->obstacles += 2;
-        screen->level++; /* add to obstacles */
+        screen->obstacles += 2; /* add to obstacles */
+        screen->level++;
     }
 
     /* Set up global variables for new level */
@@ -378,7 +344,7 @@ int eat_gold(snake_t *snake, screen_t *screen) {
     sgx_status_t status = get_length(global_eid, &length);
     check_sgx_status(status, "Could not load length");
 
-    snake_segment_t *head = & snake->body[length - 1];
+    snake_segment_t *head = &snake->body[length - 1];
 
     /* We're called after collide_object() so we know it's
      * a piece of gold at this position.  Eat it up! */
@@ -396,58 +362,32 @@ int eat_gold(snake_t *snake, screen_t *screen) {
 }
 
 void save_high_score() {
-    size_t sealed_size = sizeof(sgx_sealed_data_t) + sizeof(int);
-    uint8_t *sealed_high_score = (uint8_t*) malloc(sealed_size);
-    char secure_data[BUFSIZE];
+    char secure_data[BUF_SIZE];
 
-    sgx_status_t status = dump_high_score(global_eid, sealed_high_score, sealed_size);
+    relative_path_to(SECURE_DATA, secure_data, BUF_SIZE);
+
+    sgx_status_t status = dump_high_score(global_eid, secure_data);
     check_sgx_status(status, "Dump High score failed!");
-
-    relative_path_to("secure.data", secure_data, BUFSIZE);
-
-    FILE *high_score_file = fopen(secure_data, "wb");
-    if (high_score_file == NULL || fwrite(sealed_high_score, sealed_size, 1, high_score_file) != 1) {
-        fprintf(stderr, "Could not save high score!\n");
-    }
-
-    free(sealed_high_score);
-
-    if (high_score_file != NULL)
-        fclose(high_score_file);
 }
 
 void load_old_high_score() {
-    size_t sealed_size = sizeof(sgx_sealed_data_t) + sizeof(int);
-    uint8_t* sealed_data = (uint8_t*) malloc(sealed_size);
-    char secure_data[BUFSIZE];
+    char secure_data[BUF_SIZE];
 
-    relative_path_to("secure.data", secure_data, BUFSIZE);
+    relative_path_to(SECURE_DATA, secure_data, BUF_SIZE);
 
-    FILE *high_score_file = fopen(secure_data, "rb");
-    if (high_score_file == NULL || fread(sealed_data, sealed_size, 1, high_score_file) == 0) {
-        free(sealed_data);
-        sealed_data = NULL;
-        fprintf(stderr, "Could not read old high score! Is the file even there?\n");
-    }
-
-    sgx_status_t status = load_high_score(global_eid, sealed_data, sealed_size);
+    sgx_status_t status = load_high_score(global_eid, secure_data);
     check_sgx_status(status, "Load High score failed!");
-
-    free(sealed_data);
-
-    if (high_score_file != NULL)
-        fclose(high_score_file);
 }
 
 void init_enclave() {
-    char enclave_token[BUFSIZE];
-    char enclave_signed[BUFSIZE];
+    char enclave_token[BUF_SIZE];
+    char enclave_signed[BUF_SIZE];
 
-    relative_path_to("enclave.token", enclave_token, BUFSIZE);
-    relative_path_to("enclave.signed.so", enclave_signed, BUFSIZE);
+    relative_path_to("enclave.token", enclave_token, BUF_SIZE);
+    relative_path_to("enclave.signed.so", enclave_signed, BUF_SIZE);
 
     if (initialize_enclave(&global_eid, enclave_token, enclave_signed) < 0) {
-        fprintf(stderr, "Fail to initialize enclave.\n");
+        fprintf(stderr, "Failed to initialize enclave.\n");
         exit(1);
     }
 }
@@ -474,13 +414,13 @@ int main(void) {
     sigsetup(SIGTERM, sig_handler);
 
     do {
-        setup_level( &screen, &snake, 1);
+        setup_level(&screen, &snake, 1);
 
         do {
             keypress = (char) getchar();
 
             /* Move the snake one position. */
-            move( & snake, keys, keypress);
+            move(&snake, keys, keypress);
 
             /* keeps cursor flashing in one place instead of following snake */
             gotoxy(1, 1);
@@ -526,6 +466,10 @@ int main(void) {
     save_high_score();
 
     clrscr();
+
+    if (destroy_enclave(global_eid) < 0) {
+        fprintf(stderr, "Could not destroy Enclave %lu\n", global_eid);
+    }
 
     return WEXITSTATUS(system("stty sane"));
 }
