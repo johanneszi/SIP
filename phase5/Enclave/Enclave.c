@@ -157,14 +157,9 @@ void set_length(int level) {
     length = level + 4;
 }
 
-void reset_speed() {
-    speed = 200000;
-}
-
 void increase_speed(int level) {
-    if (level * 10000 > DEFAULT_DELAY) {
-        speed = DEFAULT_DELAY - level * 10000;
-    }
+    int new_speed = DEFAULT_DELAY - level * 10000;
+    speed = new_speed < 1 ? 1 : new_speed;
 }
 
 int get_speed() {

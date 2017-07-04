@@ -23,7 +23,6 @@ enclave {
         public void set_length(int level);
 
         public int get_speed();
-        public void reset_speed();
         public void increase_speed(int level);
     };
 
