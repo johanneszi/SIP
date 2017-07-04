@@ -141,6 +141,9 @@ void setup_level(screen_t *screen, snake_t *snake, int level) {
     if (1 == level) {
         sgx_status_t status = reset_score(global_eid);
         check_sgx_status(status, "Reset score failed!");
+        
+        status = reset_speed(global_eid);
+        check_sgx_status(status, "Reset speed failed!");
 
         screen->obstacles = 4;
         screen->level = 1;
