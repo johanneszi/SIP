@@ -33,9 +33,6 @@
 #include "dir_utils.h"
 #include "snake.h"
 
-#define SECURE_DATA "secure.data"
-#define VERSION "1.0.1"
-
 /* Global EID shared by multiple threads */
 sgx_enclave_id_t global_eid = 0;
 
@@ -141,7 +138,7 @@ void setup_level(screen_t *screen, snake_t *snake, int level) {
     if (1 == level) {
         sgx_status_t status = reset_score(global_eid);
         check_sgx_status(status, "Reset score failed!");
-        
+
         screen->obstacles = 4;
         screen->level = 1;
         snake->dir = RIGHT;
@@ -156,7 +153,7 @@ void setup_level(screen_t *screen, snake_t *snake, int level) {
     /* Set up global variables for new level */
     screen->gold = 0;
 
-    sgx_status_t status = set_length(global_eid, level);
+    sgx_status_t status = set_length(global_eid, screen->level);
     check_sgx_status(status, "Could not set snake's length!");
 
     status = increase_speed(global_eid, screen->level);
@@ -192,8 +189,13 @@ void setup_level(screen_t *screen, snake_t *snake, int level) {
     check_sgx_status(status, "Could not load length");
 
     for (i = 0; i < length; i++) {
-        snake->body[i].row = START_ROW;
-        snake->body[i].col = snake->dir == LEFT ? START_COL - i : START_COL + i;
+        if (snake->dir == LEFT || snake->dir == RIGHT) {
+            snake->body[i].row = START_ROW;
+            snake->body[i].col = snake->dir == LEFT ? START_COL - i : START_COL + i;
+        } else {
+            snake->body[i].row = snake->dir == UP ? START_ROW - i : START_ROW + i;
+            snake->body[i].col = START_COL;
+        }
     }
 
     /* Draw playing board */

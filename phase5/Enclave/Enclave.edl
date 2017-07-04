@@ -4,6 +4,7 @@ enclave {
     include "sgx_tseal.h"
     include "stdio.h"
     include "string.h"
+    include "math.h"
     
     trusted {
         public int collide_gold([in] snake_t *snake, [in] screen_t *screen); 

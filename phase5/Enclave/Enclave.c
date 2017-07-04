@@ -4,7 +4,7 @@
 
 int high_score = 0;
 int score = 0;
-int length = 4;
+int length = START_LEN;
 int speed = DEFAULT_DELAY;
 
 int collide_walls(snake_t *snake) {
@@ -62,6 +62,7 @@ void load_high_score(const char *filename) {
     size_t sealed_size = sizeof(sgx_sealed_data_t) + unsealed_size;
     uint8_t* sealed_data = NULL;
 
+    // Try to read sealed old high_score
     if ((fd = open(filename, O_RDONLY, S_IRWXU)) == -1) {
         fprintf(stderr, "Could not load secure data file! Is the file already created?\n");
         return;
@@ -74,6 +75,8 @@ void load_high_score(const char *filename) {
         return;
     }
 
+    // Try to unseal it (It may fail for example if the old high_score
+    // was not sealed by the same enclave)
     sgx_status_t status = sgx_unseal_data((sgx_sealed_data_t*) sealed_data,
             NULL, NULL, (uint8_t*) &unsealed, (uint32_t*) &unsealed_size);
 
@@ -85,7 +88,7 @@ void load_high_score(const char *filename) {
         return;
     }
 
-    fprintf(stderr, "Loaded High Score: [%d]\n", unsealed);
+    DBG("Loaded High Score: [%d]\n", unsealed);
     high_score = unsealed;
 }
 
@@ -94,6 +97,7 @@ void dump_high_score(const char *filename) {
     size_t sealed_size = sizeof(sgx_sealed_data_t) + sizeof(high_score);
     uint8_t *sealed_data = (uint8_t*) malloc(sealed_size);
 
+    // Seal high_score and save it in sealed_data
     sgx_status_t status = sgx_seal_data(0, NULL, sizeof(high_score), (uint8_t*) &high_score,
                                         sealed_size, (sgx_sealed_data_t*) sealed_data);
 
@@ -103,6 +107,7 @@ void dump_high_score(const char *filename) {
         return;
     }
 
+    // Write the sealed high_score to file
     if ((fd = open(filename, (O_CREAT | O_WRONLY | O_TRUNC), S_IRWXU)) == -1) {
         fprintf(stderr, "Could not load file to write!\n");
         free(sealed_data);
@@ -150,16 +155,22 @@ int get_length() {
 }
 
 void increase_length() {
-    length++;
+    // Increase length only if there is enough space for more segments
+    if (length < MAX_LEN) {
+        length++;
+    }
 }
 
 void set_length(int level) {
-    length = level + 4;
+    // Initialise length but don't be outside the grid in the beginning
+    int newLength = level + START_LEN;
+    length = fmin(fmin(newLength, MAX_LEN), MAXROW / 2 - 2);
 }
 
 void increase_speed(int level) {
-    int new_speed = DEFAULT_DELAY - level * 10000;
-    speed = new_speed < 1 ? 1 : new_speed;
+    // Increase speed but never more than DEFAULT_DELAY / 3
+    int new_speed = DEFAULT_DELAY - level * 1000;
+    speed = new_speed < (DEFAULT_DELAY / 3) ? DEFAULT_DELAY / 3 : new_speed;
 }
 
 int get_speed() {

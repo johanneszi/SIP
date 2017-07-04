@@ -22,18 +22,23 @@
 #ifndef __SNAKE_H__
 #define __SNAKE_H__
 
+#define VERSION "1.0.1"
+
 #define GOLD      '$'
 #define CACTUS    '*'
 
 #define MAXROW    22
 #define MAXCOL    78
 
-#define START_LEN (4 + level)
+#define START_LEN 4
+#define MAX_LEN 100
 #define START_COL (MAXCOL / 2 - START_LEN)
 #define START_ROW ((MAXROW + 1) / 2)
 
 #define DEFAULT_DELAY 200000
 #define DEFAULT_KEYS  {'o', 'p', 'a', 'z', 'f', 'j', 'q'}
+
+#define SECURE_DATA "secure.data"
 
 #ifdef DEBUG
 #define DBG(fmt, args...) fprintf(stderr, fmt, ##args)
@@ -52,7 +57,7 @@ typedef struct
 {
    direction_t     dir;
 
-   snake_segment_t body[100];
+   snake_segment_t body[MAX_LEN];
 } snake_t;
 
 typedef struct
