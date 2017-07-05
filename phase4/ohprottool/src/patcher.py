@@ -52,7 +52,8 @@ def patch(start, hash):
             else:
                 raise Exception("Instructions got corrupted!")
 
-            hash = unpack("<I", pack(">I", hash))[0]
+            hash = unpack("<i", pack(">i", hash))[0]
+            hash = (hash + (1 << 32)) % (1 << 32) # Built two's compliment
             r2.cmd('wx 0x{:08x}'.format(hash))
         elif instruction.type == 'cjmp':
             # Since the correct hash could not be added by the module pass but the program needs to be executed the condition check was added inverse
