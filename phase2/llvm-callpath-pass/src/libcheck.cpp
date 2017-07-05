@@ -49,7 +49,7 @@ std::vector<std::string> stackTrace() {
   		
   		if (position != trace.end()) {
   		   trace.erase(position);
-  		}  
+  		}
   		 
   		trace.push_back(funcName);
   	}
@@ -60,7 +60,7 @@ std::vector<std::string> stackTrace() {
   	
   	if (position != trace.end()) {
   	   trace.erase(++position, trace.end());
-  	}
+  	} 		
   	
 	return trace;
 } 
@@ -76,7 +76,7 @@ extern "C" bool check(char *validHash, bool hasToCheck) {
 	return true;
 }
 
-extern "C" void report(bool valid) {
+extern "C" void reporter(bool valid) {
 	if (!valid) {
 		std::cout << "Hash corrupted!" << std::endl; 
 	}

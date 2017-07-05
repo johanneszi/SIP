@@ -22,11 +22,11 @@ using namespace llvm;
 namespace {
 	typedef std::vector<std::vector<std::string> > VecInVec;
 	
-	const std::string CHECKFUNC = "check" , REPORTFUNC = "report";
+	const std::string CHECKFUNC = "check" , REPORTFUNC = "reporter";
 	const std::vector<std::string> ENTRYPOINTS = {"main"};
 	const std::string USAGE = "Specify file containing new line separated functions to protect.";
 	
-	const cl::opt<std::string> FILENAME("ff", cl::desc(USAGE));
+	const cl::opt<std::string> FILENAME("ff", cl::desc(USAGE.c_str()));
 	
 	struct CallPathProtectorPass : public ModulePass {
 		static char ID;
@@ -185,6 +185,8 @@ namespace {
 		VecInVec calls;
 		VecInVec results;
 		
+		seen.push_back(func);
+		
 		// If we have found the entry node --> break
 		if(std::find(ENTRYPOINTS.begin(), ENTRYPOINTS.end(), func) != ENTRYPOINTS.end()) {
 			std::vector<std::string> call;
@@ -205,9 +207,10 @@ namespace {
 					
 					// Check if we have already seen self to break circles 
 					if(std::find(seen.begin(), seen.end(), callingFunction->getName()) == seen.end()) {
-						seen.push_back(callingFunction->getName());
-						VecInVec oldCalls = getCall(CG, callingFunction->getName(), seen);				
+						VecInVec oldCalls = getCall(CG, callingFunction->getName(), seen);						
 						calls.insert(std::end(calls), std::begin(oldCalls), std::end(oldCalls));
+						
+						break;
 					}
 				}
 			}
