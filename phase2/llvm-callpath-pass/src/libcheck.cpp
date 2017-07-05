@@ -14,7 +14,8 @@ std::vector<std::string> stackTrace() {
 	std::vector<std::string> trace;
 	void *array[STACKTRACE];
   	size_t size;
-
+   std::string start;
+   
   	// get void*'s for all entries on the stack
   	size = backtrace(array, STACKTRACE);
 
@@ -35,15 +36,31 @@ std::vector<std::string> stackTrace() {
   		
   		std::string funcName(begin);
   		
+  		if (i == 2) {
+  		   start = funcName;
+  		}
+  		
   		// Skip libc functions
   		if (funcName == libcStartMain) {
   			break;
   		}
   		
+  	   std::vector<std::string>::iterator position = std::find(trace.begin(), trace.end(), funcName); 
+  		
+  		if (position != trace.end()) {
+  		   trace.erase(position);
+  		}  
+  		 
   		trace.push_back(funcName);
   	}
   	
   	std::reverse(trace.begin(), trace.end());
+  		
+  	std::vector<std::string>::iterator position = std::find(trace.begin(), trace.end(), start);
+  	
+  	if (position != trace.end()) {
+  	   trace.erase(++position, trace.end());
+  	}
   	
 	return trace;
 } 
