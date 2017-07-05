@@ -7,6 +7,7 @@
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
 #include "llvm/Support/raw_ostream.h"
 
+#include "llvm/Analysis/LoopInfo.h"
 #include "input-dependency/InputDependencyAnalysis.h"
 
 #include <string>
@@ -101,6 +102,7 @@ namespace {
     void OHProtectorPass::getAnalysisUsage(AnalysisUsage &AU) const {
         AU.setPreservesAll();
         AU.addRequired<input_dependency::InputDependencyAnalysis>();
+        AU.addRequired<LoopInfoWrapperPass>();
     }
 
     bool OHProtectorPass::runOnModule(Module &M) {
@@ -148,6 +150,7 @@ namespace {
 
     void OHProtectorPass::insertGuards(Module &M, IRBuilder<> *builder) {
         int checkCounter = 0;
+        const LoopInfo *loops_info = nullptr;
 
         while (true) {
             for (auto &F : M) {
@@ -155,7 +158,10 @@ namespace {
                     continue;
                 }
 
+                loops_info = &getAnalysis<LoopInfoWrapperPass>(F).getLoopInfo();
+
                 for (auto &B : F) {
+                    if (loops_info != nullptr && loops_info->getLoopFor(&B) != NULL) { continue; }
                     for (auto &I : B) {
                         // PHINode Instructions and the back of a block or terminators can not be used to split blocks which is done during checker insertion
                         if (!isa<PHINode>(I) && &I != &(I.getParent()->back()) && !I.isTerminator() && shouldInsertGuard()) {
@@ -256,25 +262,25 @@ namespace {
                     I->dump();
                     exit(1); // All defined instructions have to be protected!
             }
-            
+
             Value *alloc = builder->CreateAlloca(int32Ty);
             Value *casted = builder->CreateIntCast(toCast, int32Ty, false);
             builder->CreateStore(casted, alloc);
             LoadInst *loadResult = builder->CreateLoad(alloc);
             BinaryOperator *hash = generateHashFunction(builder, loadResult, loadGlobal);
             StoreInst *storeGlobal = builder->CreateStore(hash, currentGlobal);
-           
+
             if (I->getOpcode() == Instruction::ICmp) {
                 LoadInst *loadResult = builder->CreateLoad(alloc);
-                
+
                 Instruction *nextBrInst = I;
                 while (nextBrInst->getOpcode() != Instruction::Br) {
                     nextBrInst = nextBrInst->getNextNode();
                 }
-                 
+
                 nextBrInst->setOperand(0, builder->CreateICmpNE(loadResult, builder->getInt32(0))); 
             }
-            
+
             // Save inserted protection instruction to be protected in
             // one last run
             if (!finalRun) {
