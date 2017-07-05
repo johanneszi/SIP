@@ -12,7 +12,7 @@ RUN apt-get update && apt-get install -y \
 	wget \
  && rm -rf /var/lib/apt/lists/*
 
-# Download and set up of LLVM 
+# Download and set up of LLVM
 WORKDIR /home/llvm
 RUN wget http://llvm.org/releases/4.0.0/llvm-4.0.0.src.tar.xz && \
 	wget http://llvm.org/releases/4.0.0/cfe-4.0.0.src.tar.xz && \
@@ -40,5 +40,4 @@ WORKDIR /home
 RUN git clone https://github.com/johanneszi/SIP.git
 
 WORKDIR /home/SIP/phase2/llvm-callpath-pass
-RUN make	
-
+RUN make

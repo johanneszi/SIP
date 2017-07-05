@@ -1,17 +1,16 @@
 {
     "modes" : ["OH", "RC", "CFG"],
-    
+
     "program" : "InterestingProgram.c",
     "hashVariables" : 5,
     "checksPerHashVariable": 1,
     "obfuscationLevel":0.2,
     "debug" : true,
-    
+
     "functions" : ["mul","min", "add", "sub","isValidLicenseKey", "addChar"],
     "connectivity" : 2,
     "syminput" : "../phase3/Docker/klee/syminputC.py",
     "verbose" : true,
-    
+
     "funcsToCheck" : ["InterestingProcedure", "add", "sub"]
 }
-

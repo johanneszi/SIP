@@ -7,16 +7,16 @@ def seek(addr):
 	r2.cmd('s '+ str(addr))
 
 def currentInst(instruction):
-	if not instruction or len(instruction) == 0: 
+	if not instruction or len(instruction) == 0:
 		return (None, None, None)
-	
+
 	# Take the first instruction
-	currentInstruction = instruction[0] 
-	
+	currentInstruction = instruction[0]
+
 	type = None
 	opcode = None
 	size = None
-	
+
 	# Populate instruction parameters
 	if currentInstruction.get('type'):
 		type = currentInstruction['type']
@@ -24,11 +24,11 @@ def currentInst(instruction):
 		opcode = currentInstruction['opcode']
 	if currentInstruction.get('size'):
 		size = int(currentInstruction['size'])
-		
-	return (type, opcode, size) 
+
+	return (type, opcode, size)
 
 def isReport(type, opcode):
-	# We search for a mov whoose second parameter 
+	# We search for a mov whoose second parameter
 	# is an address.
 	if type == 'mov':
 		sAddr = opcode.split(',')[1].strip()
@@ -36,30 +36,30 @@ def isReport(type, opcode):
 			int(sAddr, 16)
 		except:
 			return False
-			
+
 		# Look up what string is pointing to
 		# that address
 		hashString = r2.cmd('ps @ ' + sAddr)
 		if 'corrupted' in hashString:
 			return True
-	
-	return False  
+
+	return False
 
 def findReport(start):
 	address = start
-	
+
 	while True:
 		seek(address)
 		instruction = r2.cmdj('pdj 1')
 		(type, opcode, size) = currentInst(instruction)
-		
+
 		# If no more instructions - break
 		if not type or type == 'invalid' or not size:
 			break
-		
+
 		if isReport(type, opcode):
 			yield address
-			
+
 		address += size
 
 def patchReport(address):
@@ -89,5 +89,3 @@ if __name__ == "__main__":
 		patchReport(reportAddr)
 
 	r2.quit()
-
-	

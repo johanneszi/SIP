@@ -278,7 +278,7 @@ namespace {
                     nextBrInst = nextBrInst->getNextNode();
                 }
 
-                nextBrInst->setOperand(0, builder->CreateICmpNE(loadResult, builder->getInt32(0))); 
+                nextBrInst->setOperand(0, builder->CreateICmpNE(loadResult, builder->getInt32(0)));
             }
 
             // Save inserted protection instruction to be protected in

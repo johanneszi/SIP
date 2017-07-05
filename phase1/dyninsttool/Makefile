@@ -45,18 +45,17 @@ DYNINST_LIBS = -L$(DYNINST_LIB) \
 
 $(BUILD)InterestingProgram: $(SOURCE)InterestingProgram.c
 	$(CC) $(CCFLAGS) -o $@ $^
-	
+
 $(BUILD)instroProtect: $(BUILD)instroProtect.o
-	$(CXX) $(CXXFLAGS) -o $@ $^ -I$(DYNINST_INCLUDE) $(DYNINST_LIBS) 
+	$(CXX) $(CXXFLAGS) -o $@ $^ -I$(DYNINST_INCLUDE) $(DYNINST_LIBS)
 
 $(BUILD):
 	$(MKDIR)
-	
+
 $(BUILD)%.o: $(SOURCE)%.C
 	$(CXX) $(CXXFLAGS) -I$(DYNINST_INCLUDE) -I$(LIBELF) -I$(LIBDWARF) -c $< -o $@
-	
+
 .PHONY: clean
 
-clean: 
+clean:
 	rm -rf $(BUILD)*
-

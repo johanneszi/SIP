@@ -22,4 +22,3 @@ Block 6 with startAddress 0x804846e checks:
 Block 7 with startAddress 0x8048474 checks:
 	Block 5 with startAddress 0x804846a
 	Block 6 with startAddress 0x804846e
-	

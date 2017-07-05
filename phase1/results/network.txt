@@ -25,4 +25,3 @@ Block 8 with startAddress 0x400581 checks:
 	Block 0 with startAddress 0x400541
 	Block 3 with startAddress 0x400552
 	Block 7 with startAddress 0x40057b
-

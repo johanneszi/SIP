@@ -12,19 +12,19 @@ LLVM_CONFIG_COMMAND = \
 		`/usr/bin/llvm-config-3.9 --cxxflags --libs` \
 		`/usr/bin/llvm-config-3.9 --ldflags`
 
-PROG = crypto.o libCallPathProtectorPass.so libcheck.o 
+PROG = crypto.o libCallPathProtectorPass.so libcheck.o
 TARGETS = $(addprefix $(BUILD), $(PROG))
 
 all: directories $(TARGETS)
-	
+
 .PHONY: directories
-directories: 
+directories:
 	@ mkdir -p $(BUILD)
 
 $(BUILD)%.o: $(SOURCE)%.cpp
 	$(CXX) -c -fPIC -std=c++11 $(CXXFLAGS_LLVM) $(LLVM_CONFIG_COMMAND) $^ -o $@
 
-$(BUILD)libCallPathProtectorPass.so: $(BUILD)CallPathProtectorPass.o 
+$(BUILD)libCallPathProtectorPass.so: $(BUILD)CallPathProtectorPass.o
 	$(CXX) -std=c++11 $(BUILD)crypto.o $(CXXFLAGS_LLVM) -shared $(LLVM_CONFIG_COMMAND) $^ -o $@
 
 .PHONY: clean
@@ -32,4 +32,3 @@ clean:
 	@ rm -f $(BUILD)*.so
 	@ rm -f $(BUILD)*.o
 	@ rm -f $(BUILD)*.bc
-	

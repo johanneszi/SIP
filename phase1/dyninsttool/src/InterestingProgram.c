@@ -11,10 +11,9 @@ void InterestingProcedure() {
 int main() {
     printf("Hello, world!\n");
 
-    int i; 
+    int i;
     for (i = 0; i < 10; i++)
         InterestingProcedure();
 
     return 0;
 }
-

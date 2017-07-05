@@ -2,7 +2,7 @@
 #include <string.h>
 #include <stdlib.h>
 void InterestingProcedure() {
-    printf("\t This is an interesting procedure\n");
+	printf("\t This is an interesting procedure\n");
 }
 
 void a();
@@ -32,7 +32,7 @@ void e() {
 }
 void print(char *message) {
 	InterestingProcedure();
-    printf("%s\n", message);
+	printf("%s\n", message);
 }
 
 int main(int argc, char** argv) {
@@ -40,6 +40,5 @@ int main(int argc, char** argv) {
 	InterestingProcedure();
 	a();
 	gets(inp);
-    return 0;
+	return 0;
 }
-
