@@ -7,6 +7,7 @@
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
 #include "llvm/Support/raw_ostream.h"
 
+#include "llvm/Analysis/CallGraph.h"
 #include "llvm/Analysis/LoopInfo.h"
 #include "input-dependency/InputDependencyAnalysis.h"
 
@@ -17,6 +18,7 @@
 #include <random>
 #include <ctime>
 #include <limits>
+#include <iterator>
 
 #include <json/value.h>
 #include <json/reader.h>
@@ -29,6 +31,9 @@ using std::vector;
 using std::string;
 
 namespace {
+    typedef std::vector<std::vector<std::string> > VecInVec;
+    
+    const std::vector<std::string> ENTRYPOINTS = {"main"};
     const string PUTSFUNC = "puts", PRINTFFUNC = "printf";
     const static vector<unsigned> PROTECTEDINSTRUCTIONS = {Instruction::Load, Instruction::Store,
                                                            Instruction::ICmp, Instruction::Sub,
@@ -67,7 +72,10 @@ namespace {
         void insertGuards(Module &M, IRBuilder<> *builder);
         void insertReportFunction(IRBuilder<> *builder);
         BinaryOperator* generateHashFunction(IRBuilder<> *builder, Value *operandOne, Value *operandTwo);
-
+        
+        int getCall(CallGraph *CG, StringRef func, std::vector<std::string> seen);
+        int getCallGraphForFunction(CallGraph *CG, Function *func);
+        
         template<typename T> vector<T *> twistGetPartFromVector(vector<T *> input, double percent);
         bool isPtrToPtr(Value *value);
         int generateHashVariableID();
@@ -90,7 +98,7 @@ namespace {
             putsFunction = M.getOrInsertFunction(PUTSFUNC, FunctionType::get(voidTy, ptrTy, false));
         }
 
-        Type *argsTypes[3] = {ptrTy, int32Ty, int32Ty};
+        Type *argsTypes[3] = { ptrTy, int32Ty, int32Ty };
 
         printfFunction = M.getOrInsertFunction(PRINTFFUNC, FunctionType::get(voidTy, ArrayRef<Type *>(argsTypes), false));
 
@@ -103,14 +111,15 @@ namespace {
         AU.setPreservesAll();
         AU.addRequired<input_dependency::InputDependencyAnalysis>();
         AU.addRequired<LoopInfoWrapperPass>();
+        AU.addRequired<CallGraphWrapperPass>();
     }
 
     bool OHProtectorPass::runOnModule(Module &M) {
         const auto &input_dependency_info = getAnalysis<input_dependency::InputDependencyAnalysis>();
-
+		
         LLVMContext &ctx = M.getContext();
         IRBuilder<> builder(ctx);
-
+        
         insertGlobals(M, numHashVariables);
 
         // Save all input independent instructions which have to be protected
@@ -151,12 +160,21 @@ namespace {
     void OHProtectorPass::insertGuards(Module &M, IRBuilder<> *builder) {
         int checkCounter = 0;
         const LoopInfo *loops_info = nullptr;
-
+        
+        CallGraphWrapperPass *CGPass = getAnalysisIfAvailable<CallGraphWrapperPass>();
+		CallGraph *CG = CGPass ? &CGPass->getCallGraph() : nullptr;
+		if (CG == nullptr) {
+			errs() << ERROR << " No CallGraph can be generated!\n";
+			return;
+		}
+		
         while (true) {
             for (auto &F : M) {
                 if (F.isDeclaration()) {
                     continue;
                 }
+                
+                if (getCallGraphForFunction(CG, &F) != 1) { continue; }
 
                 loops_info = &getAnalysis<LoopInfoWrapperPass>(F).getLoopInfo();
 
@@ -194,7 +212,7 @@ namespace {
         LoadInst *loadGlobal = builder->CreateLoad(global);
         Value *idValue = builder->getInt32(id);
         Value *format = builder->CreateGlobalStringPtr("\n%d,%d\n");
-        vector<Value *> args = {format, idValue, loadGlobal};
+        vector<Value *> args = { format, idValue, loadGlobal };
         builder->CreateCall(printfFunction, args);
 
         // Creates and injects assert
@@ -330,6 +348,68 @@ namespace {
         InlineAsm *corruptStack = InlineAsm::get(FunctionType::get(voidTy, false), "add $$0x10, %rsp", "", false);
         builder->CreateCall(corruptStack);
     }
+    
+    int OHProtectorPass::getCall(CallGraph *CG, StringRef func, std::vector<std::string> seen) {
+        int result = 0;
+		seen.push_back(func);
+
+		// If we have found the entry node --> break
+		if(std::find(ENTRYPOINTS.begin(), ENTRYPOINTS.end(), func) != ENTRYPOINTS.end()) {
+    		int loopCounter = 0;
+    		
+    		for (const auto &caller : *CG) {
+    			const Function *callFunction = caller.first;
+			    if (callFunction == nullptr) { continue; }
+			    Function *callingFunction = caller.second->getFunction();
+    			if (callingFunction == nullptr || callingFunction->getName() != func) { continue; }
+                
+                const LoopInfo *loops_info = &getAnalysis<LoopInfoWrapperPass>(*callingFunction).getLoopInfo();
+                
+                for (LoopInfo::iterator begin = loops_info->begin(), end =loops_info->end(); begin != end; ++begin) {
+                    loopCounter++;
+                }
+            }
+            
+            if (loopCounter > 0)
+			    return loopCounter;
+			    
+			return 1;
+		}
+
+		for (const auto &caller : *CG) {
+			const Function *callingFunction = caller.first;
+			if (callingFunction == nullptr) { continue; }
+			//Function *callingFunction = caller.second->getFunction();
+			int loopCounter = 0;
+			const LoopInfo *loops_info = &getAnalysis<LoopInfoWrapperPass>(*caller.second->getFunction()).getLoopInfo();  
+            for (LoopInfo::iterator begin = loops_info->begin(), end =loops_info->end(); begin != end; ++begin) {
+                loopCounter++;
+            }
+
+			for (const auto &callee : *(caller.second.get())) {
+				Function *calledFunction = callee.second->getFunction();
+                
+				if (calledFunction != nullptr && calledFunction->size() != 0 && calledFunction->getName() == func) {
+                    if (loopCounter>0) {
+                        result = 2;
+                    }
+                    
+					// Check if we have already seen self to break circles
+					if(std::find(seen.begin(), seen.end(), callingFunction->getName()) == seen.end()) {
+						result += getCall(CG, callingFunction->getName(), seen);
+					}
+				}
+			}
+		}
+        
+		return result;
+	}
+
+	int OHProtectorPass::getCallGraphForFunction(CallGraph *CG, Function *func) {
+	    int res = getCall(CG, func->getName(), std::vector<std::string>());
+		errs() << func->getName()  << "  " << res << "\n";
+		return res;
+	}
 
     BinaryOperator* OHProtectorPass::generateHashFunction(IRBuilder<> *builder, Value *operandOne, Value *operandTwo) {
         int randNum = rand() % 2;
