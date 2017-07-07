@@ -1,0 +1,18 @@
+ZOPFLILIB_SRC="/home/sip/dataset/src/zopfli/src/zopfli/blocksplitter.c \
+               /home/sip/dataset/src/zopfli/src/zopfli/cache.c \
+               /home/sip/dataset/src/zopfli/src/zopfli/deflate.c \
+               /home/sip/dataset/src/zopfli/src/zopfli/gzip_container.c \
+               /home/sip/dataset/src/zopfli/src/zopfli/hash.c \
+               /home/sip/dataset/src/zopfli/src/zopfli/katajainen.c \
+               /home/sip/dataset/src/zopfli/src/zopfli/lz77.c \
+               /home/sip/dataset/src/zopfli/src/zopfli/squeeze.c \
+               /home/sip/dataset/src/zopfli/src/zopfli/tree.c \
+               /home/sip/dataset/src/zopfli/src/zopfli/util.c \
+               /home/sip/dataset/src/zopfli/src/zopfli/zlib_container.c \
+               /home/sip/dataset/src/zopfli/src/zopfli/zopfli_lib.c"
+
+ZOPFLIBIN_SRC="/home/sip/dataset/src/zopfli/src/zopfli/zopfli_bin.c"
+
+
+clang-3.9 -c -O0 -emit-llvm  ${ZOPFLILIB_SRC} ${ZOPFLIBIN_SRC} 
+llvm-link-3.9 *.bc -o "${build}${cfile}${fileVersion}.bc"
