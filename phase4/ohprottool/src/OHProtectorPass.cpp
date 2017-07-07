@@ -378,7 +378,7 @@ namespace {
 
 		for (const auto &caller : *CG) {
 			const Function *callingFunction = caller.first;
-			if (callingFunction == nullptr) { continue; }
+			if (callingFunction == nullptr || callingFunction->isDeclaration()) { continue; }
 			//Function *callingFunction = caller.second->getFunction();
 			int loopCounter = 0;
 			const LoopInfo *loops_info = &getAnalysis<LoopInfoWrapperPass>(*caller.second->getFunction()).getLoopInfo();  
