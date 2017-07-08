@@ -1,65 +1,164 @@
 #!/bin/bash
 
+# Tools
+OPT=opt-3.9
+CLANG=clang-3.9
+LINK=llvm-link-3.9
+LLC=llc-3.9
+CXX=g++
+
+# Common folders
 build="build/"
 libs="/usr/local/lib/"
-filename=""
-cfile=""
-outputFile="/tmp/output.data"
-patcher="../phase4/ohprottool/src/patcher.py"
-funcsToCheckFile="${build}funcsToCheck"
+
+# Passes
+cfiPass="../phase2/llvm-callpath-pass/${build}libCallPathProtectorPass.so"
+rcPass="../phase3/stins4llvm/${build}libStateProtectorPass.so"
+ohPass="../phase4/ohprottool/${build}libOHProtectorPass.so"
+independentInputPass="${libs}libInputDependency.so"
+
+# Passes' libraries and files
+cfiLibrary="../phase2/llvm-callpath-pass/${build}libcheck.o ../phase2/llvm-callpath-pass/${build}crypto.o"
+libssl="-L/usr/lib/x86_64-linux-gnu/ -lssl -lcrypto"
+rcLibrary="../phase3/stins4llvm/${build}libcheck.o"
+funcsToCheckFile="${build}functionsCFI"
+ohOutputFile="/tmp/output.data"
+ohPatcher="../phase4/ohprottool/src/patcher.py"
+
+# Passes options
+compilerFlagsFront=""
+compilerFlagsBack=""
+ohExecuted=false
+
+# Configurations
+config=""
+resultFile=""
 fileVersion=0
 
-function usage() {
+function usage {
     echo "usage: run.sh [-f file ]"
     echo "  -f file containing configuration"
+    echo "  -c clean build folder"
 }
 
-function exitIfFail() {
+function exitIfFail {
     if [ $1 != 0 ]; then
         exit $1
     fi
 }
 
-function printFuncsToCheck() {
+# https://stackoverflow.com/questions/1527049/join-elements-of-an-array
+function joinBy {
+    local IFS="$1"; shift; echo "$*";
+}
+
+function rmBuildDir {
+    rm -rf $build 2> /dev/null
+}
+
+function makeBuildDir {
+    mkdir -p ${build}
+}
+
+function printFuncsToCheck {
     rm $funcsToCheckFile 2> /dev/null
-    for func in $(jq -r '.funcsToCheck[]' $filename)
+    for func in $(jq -r '.functionsCFI[]' $config)
     do
         echo $func >> $funcsToCheckFile
     done
 }
 
-function OH() {
-    opt-3.9 -load "${libs}libInputDependency.so" \
-        -load "../phase4/ohprottool/${build}libOHProtectorPass.so" \
-        "${build}${cfile}${fileVersion}.bc" -OHProtect -ff $filename -o "${build}${cfile}${fileVersion+1}.bc"
-    exitIfFail $?
-}
-
-function CFG() {
+function CFI {
     LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libssl.so \
-    opt-3.9 -load "../phase2/llvm-callpath-pass/${build}libCallPathProtectorPass.so" \
-        "${build}${cfile}${fileVersion}.bc" -callpath -ff ${funcsToCheckFile} -o "${build}${cfile}${fileVersion+1}.bc"
+    ${OPT} -load ${cfiPass} \
+        "${build}${resultFile}${fileVersion}.bc" -callpath -ff ${funcsToCheckFile} -o "${build}${resultFile}${fileVersion+1}.bc"
     exitIfFail $?
 }
 
-function RC() {
-    opt-3.9 -load "../phase3/stins4llvm/${build}libStateProtectorPass.so" \
-        "${build}${cfile}${fileVersion}.bc" -stateProtect -ff $filename -o "${build}${cfile}${fileVersion+1}.bc" 
+function RC {
+    ${OPT} -load ${rcPass} \
+        "${build}${resultFile}${fileVersion}.bc" -stateProtect -ff $config -o "${build}${resultFile}${fileVersion+1}.bc"
     exitIfFail $?
 }
 
-if [ "$1" == "" ] || [ $# != 2 ]; then
+function OH {
+    ${OPT} -load ${independentInputPass} -load ${ohPass} \
+        "${build}${resultFile}${fileVersion}.bc" -OHProtect -ff $config -o "${build}${resultFile}${fileVersion+1}.bc"
+    exitIfFail $?
+}
+
+function ohPatch {
+    if [ $ohExecuted == true ]; then
+        ./${build}${resultFile} |& tee $ohOutputFile
+        exitIfFail $?
+
+        python3 $ohPatcher ${build}${resultFile} $ohOutputFile
+        exitIfFail $?
+    fi
+}
+
+function getBCFiles {
+    local bcFiles
+
+    for element in "$@"
+    do
+        file=$(basename "$element")
+        bcFiles+="${file%.*}.bc "
+    done
+
+    echo "$bcFiles"
+}
+
+function executeProtection {
+    local modes=("CFI" "RC" "OH")
+
+    for mode in ${!1}
+    do
+        if [[ ! " ${modes[@]} " =~ " ${mode} " ]]; then
+            echo "$mode does not recognised!"
+            continue
+        fi
+
+        echo "Protecting in $mode mode..."
+
+        if [ $mode == "OH" ]; then
+            OH
+            ohExecuted=true
+        fi
+
+        if [ $mode == "CFI" ]; then
+            printFuncsToCheck
+            CFI
+            compilerFlagsFront+=" ${cfiLibrary} "
+            compilerFlagsBack+=" ${libssl} "
+        fi
+
+        if [ $mode == "RC" ]; then
+            RC
+            compilerFlagsFront+=" ${rcLibrary} "
+        fi
+
+        fileVersion=${fileVersion+1}
+        echo "Done protecting in $mode mode"
+    done
+}
+
+# Check if enough arguments supplied to program
+if (($# < 2)) || (($# > 3)); then
     usage
     exit 1
 fi
 
+# Parce input arguments
 while [ "$1" != "" ]; do
     case $1 in
         -f | --file )           shift
-                                filename=$1
+                                config=$1
                                 ;;
         -h | --help )           usage
                                 exit
+                                ;;
+        -c | --clean )          rmBuildDir
                                 ;;
         * )                     usage
                                 exit 1
@@ -67,66 +166,42 @@ while [ "$1" != "" ]; do
     shift
 done
 
+# Make build folder
+makeBuildDir
 
-mkdir -p ${build}
+# Parse json to get inputs
+inputCFiles=($(jq -r '.program[]' $config))
+exitIfFail $?
+inputCFiles=$(joinBy ' ' "${inputCFiles[@]}")
 
-# Parse json to get c file name
-c=$(jq -r '.program' $filename)
+inputBCFiles=$(getBCFiles $inputCFiles)
+
+resultFile=$(jq -r '.binary' $config)
 exitIfFail $?
 
-inputmodes=($(jq -r '.modes[]' $filename))
-
-# Parce c file
-arrC=(${c//// })
-cfile=${arrC[${#arrC[@]}-1]}
-arrC=(${cfile//./ })
-cfile=${arrC[0]}
-
-
-clang-3.9 -c -O0 -emit-llvm ${c} -o "${build}${cfile}${fileVersion}.bc"
+clangFlags=$(jq -r 'select(.clangFlags != null) .clangFlags' $config)
 exitIfFail $?
 
-flags_front=""
-flags_back=""
-oh_flag=false
-
-for mode in $(jq -r '.modes[]' $filename)
-do  
-    echo $mode
-    if [ $mode == "OH" ]; then
-      OH  
-      oh_flag=true
-      fileVersion=${fileVersion+1}
-    fi
-    
-    if [ $mode == "CFG" ]; then
-      printFuncsToCheck
-      CFG
-      flags_front="${flags_front} ../phase2/llvm-callpath-pass/${build}libcheck.o ../phase2/llvm-callpath-pass/${build}crypto.o "
-      flags_back="$flags_back -L/usr/lib/x86_64-linux-gnu/ -lssl -lcrypto "
-      fileVersion=${fileVersion+1}
-    fi
-    
-    if [ $mode == "RC" ]; then
-      RC  
-      flags_front="${flags_front} ../phase3/stins4llvm/${build}libcheck.o "
-      fileVersion=${fileVersion+1}
-    fi
-done
-
-
-
-
-llc-3.9 -filetype=obj "${build}${cfile}${fileVersion}.bc"
+# Generate bc files
+${CLANG} -c -emit-llvm ${inputCFiles} $clangFlags -O0
 exitIfFail $?
 
-g++ -rdynamic "${build}${cfile}${fileVersion}.o" $flags_front -o "${build}${cfile}-rewritten" $flags_back
+${LINK} $inputBCFiles -o "${build}${resultFile}${fileVersion}.bc"
+exitIfFail $?
+rm $inputBCFiles 2> /dev/null
+
+# Protect
+inputmodes=($(jq -r '.modes[]' $config))
+exitIfFail $?
+executeProtection inputmodes[@]
+
+# Generate object
+${LLC} -filetype=obj "${build}${resultFile}${fileVersion}.bc"
 exitIfFail $?
 
-if [ $oh_flag == true ]; then
-    ./"${build}${cfile}-rewritten" |& tee $outputFile
-    exitIfFail $?
+# Link
+${CXX} -rdynamic "${build}${resultFile}${fileVersion}.o" $compilerFlagsFront -o ${build}${resultFile} $compilerFlagsBack
+exitIfFail $?
 
-    python3 $patcher "${build}${cfile}-rewritten" $outputFile
-    exitIfFail $?
-fi
+# Patch if necessary
+ohPatch

@@ -23,7 +23,7 @@ namespace {
 	typedef std::vector<std::vector<std::string> > VecInVec;
 
 	const std::string CHECKFUNC = "check" , REPORTFUNC = "reporter";
-	const std::vector<std::string> ENTRYPOINTS = {"main"};
+	const std::vector<std::string> ENTRYPOINTS = { "main" };
 	const std::string USAGE = "Specify file containing new line separated functions to protect.";
 
 	const cl::opt<std::string> FILENAME("ff", cl::desc(USAGE.c_str()));
@@ -196,12 +196,13 @@ namespace {
 
 		for (const auto &caller : *CG) {
 			const Function *callingFunction = caller.first;
-			if (callingFunction == nullptr) { continue; }
+			if (callingFunction == nullptr || callingFunction->isDeclaration()) { continue; }
 
 			for (const auto &callee : *(caller.second.get())) {
 				Function *calledFunction = callee.second->getFunction();
 
-				if (calledFunction != nullptr && calledFunction->size() != 0 && calledFunction->getName() == func) {
+				if (calledFunction != nullptr && !calledFunction->isDeclaration() &&
+				    calledFunction->size() != 0 && calledFunction->getName() == func) {
 
 					// Check if we have already seen self to break circles
 					if(std::find(seen.begin(), seen.end(), callingFunction->getName()) == seen.end()) {

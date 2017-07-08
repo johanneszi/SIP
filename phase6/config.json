@@ -1,16 +1,20 @@
 {
-    "modes" : ["OH", "RC", "CFG"],
+    "modes" : ["RC", "CFI"],
+    "clangFlags" : "-W -Wall -Wextra -ansi -pedantic -O2 -Wno-unused-function",
+    "program" : ["InterestingProgram.c"],
+    "binary" : "InterestingProgram-rewritten",
 
-    "program" : "InterestingProgram.c",
+
     "hashVariables" : 5,
     "checksPerHashVariable": 1,
     "obfuscationLevel":0.2,
     "debug" : true,
 
-    "functions" : ["mul","min", "add", "sub","isValidLicenseKey", "addChar"],
+    "functionsRC" : ["mul", "add", "sub"],
     "connectivity" : 2,
-    "syminput" : "../phase3/Docker/klee/syminputC.py",
+    "syminputC" : "../phase3/Docker/klee/syminputC.py",
+    "syminputBC" : "../phase3/Docker/klee/syminputBC.py",
     "verbose" : true,
 
-    "funcsToCheck" : ["InterestingProcedure", "add", "sub"]
+    "functionsCFI" : ["mul", "add", "sub"]
 }
