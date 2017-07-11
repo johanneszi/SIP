@@ -1,0 +1,14 @@
+Self-checksumming:
+self-checksumming is installed in usr/local/bin
+
+
+Control flow integrity:
+cd /cfi/build
+
+
+Result checking:
+cd ~/SIP/phase3/stins4llvm
+
+
+Oblivious hashing:
+cd introspection-oblivious-hashing

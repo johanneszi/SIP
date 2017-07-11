@@ -66,13 +66,6 @@ RUN git clone -b ktest-result --depth 1 https://github.com/tum-i22/macke-opt-llv
 	KLEE_BUILDDIR=/home/sip/build/klee/Release+Asserts \
 	KLEE_INCLUDES=/home/sip/build/klee/include
 
-# Copy input-dependency pass files
-COPY input-dependency-pass/include/ /usr/local/include/
-COPY input-dependency-pass/lib/ /usr/local/lib/
-
-# Copy dataset files
-COPY dataset/ /home/sip/dataset
-
 # Install jsoncpp
 RUN git clone --depth 1 https://github.com/open-source-parsers/jsoncpp.git && \
     mkdir -p /home/sip/jsoncpp/build && \
@@ -83,6 +76,31 @@ RUN git clone --depth 1 https://github.com/open-source-parsers/jsoncpp.git && \
 RUN git clone --depth 1 https://github.com/radare/radare2.git && \
     sh /home/sip/radare2/sys/install.sh && \
     pip3 install r2pipe
+
+# Copy input-dependency pass files
+COPY input-dependency-pass/include/ /usr/local/include/
+COPY input-dependency-pass/lib/ /usr/local/lib/
+
+# Copy dataset files
+COPY dataset/ /home/sip/dataset
+
+# Copy cfi default protection and install
+COPY defaultProtection /home/sip/defaultProtection
+RUN mkdir -p /home/sip/defaultProtection/cfi/build && \
+    cmake -H/home/sip/defaultProtection/cfi -B/home/sip/defaultProtection/cfi/build && \
+    make -C /home/sip/defaultProtection/cfi/build -j 2
+
+# Install self-checking default protection
+RUN git clone --depth 1 https://github.com/anahitH/self-checksumming.git /home/sip/defaultProtection/self-checksumming && \
+    mkdir -p /home/sip/defaultProtection/self-checksumming/build && \
+    cmake -H/home/sip/defaultProtection/self-checksumming -B/home/sip/defaultProtection/self-checksumming/build && \
+    make -C /home/sip/defaultProtection/self-checksumming/build -j 2
+
+# Install oblivious hashing default protection
+RUN git clone --depth 1 https://github.com/djwessel/introspection-oblivious-hashing.git /home/sip/defaultProtection/introspection-oblivious-hashing && \
+    mkdir -p /home/sip/defaultProtection/introspection-oblivious-hashing/build && \
+    cmake -H/home/sip/defaultProtection/introspection-oblivious-hashing -B/home/sip/defaultProtection/introspection-oblivious-hashing/build && \
+    make -C /home/sip/defaultProtection/introspection-oblivious-hashing/build -j 2
 
 # Switch to user
 RUN chown -R sip:sip /home/sip
