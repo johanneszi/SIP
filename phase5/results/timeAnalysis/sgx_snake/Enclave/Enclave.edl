@@ -1,0 +1,35 @@
+enclave {
+    include "snake.h"
+    
+    include "sgx_tseal.h"
+    include "stdio.h"
+    include "string.h"
+    
+    trusted {
+        public int collide_gold([in] snake_t *snake, [in] screen_t *screen); 
+	    public int collision([in] snake_t *snake, [in] screen_t *screen);
+
+        public void load_high_score([in, string] const char* filename);
+        public void dump_high_score([in, string] const char* filename);
+        public int get_high_score();
+
+        public int get_score();
+        public void update_score_gold(int obstacles);
+        public void update_score_level(int level);
+        public void reset_score();
+
+        public int get_length();
+        public void increase_length();
+        public void set_length(int level);
+
+        public int get_speed();
+        public void increase_speed(int level);
+    };
+
+    untrusted {
+        int ocall_open([in, string] const char* filename, int flag, int mode);
+        int ocall_read(int file, [out, size=size] void *buf, unsigned int size);
+        int ocall_write(int file, [in, size=size] void *buf, unsigned int size);
+        int ocall_close(int file);
+    };
+};
