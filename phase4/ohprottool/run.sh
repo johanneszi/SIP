@@ -47,7 +47,7 @@ cfile=${arrC[${#arrC[@]}-1]}
 arrC=(${cfile//./ })
 cfile=${arrC[0]}
 
-clang-3.9 -c -O0 -emit-llvm ${c} -o "${build}${cfile}.bc"
+clang-3.9 -c -O1 -emit-llvm ${c} -o "${build}${cfile}.bc"
 exitIfFail $?
 
 opt-3.9 -load "${libs}libInputDependency.so" \
@@ -55,10 +55,10 @@ opt-3.9 -load "${libs}libInputDependency.so" \
         -OHProtect -ff $filename -o "${build}${cfile}-inst.bc" "${build}${cfile}.bc"
 exitIfFail $?
 
-llc-3.9 -filetype=obj "${build}${cfile}-inst.bc"
+llc-3.9 -O0 -filetype=obj "${build}${cfile}-inst.bc"
 exitIfFail $?
 
-clang-3.9 "${build}${cfile}-inst.o" -o "${build}${cfile}-rewritten"
+clang-3.9 -O0 "${build}${cfile}-inst.o" -o "${build}${cfile}-rewritten"
 exitIfFail $?
 
 ./"${build}${cfile}-rewritten" |& tee $outputFile

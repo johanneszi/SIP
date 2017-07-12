@@ -1,20 +1,31 @@
 {
-    "modes" : ["RC", "CFI"],
+    "modes" : ["OH"],
+    "binary" : "zopfli-rewritten",
     "clangFlags" : "-W -Wall -Wextra -ansi -pedantic -O2 -Wno-unused-function",
-    "program" : ["InterestingProgram.c"],
-    "binary" : "InterestingProgram-rewritten",
-
-
+    
+    "program" : ["/home/zhechev/Developer/SIP/phase6/Docker/dataset/src/zopfli/src/zopfli/blocksplitter.c",
+                 "/home/zhechev/Developer/SIP/phase6/Docker/dataset/src/zopfli/src/zopfli/cache.c", 
+                 "/home/zhechev/Developer/SIP/phase6/Docker/dataset/src/zopfli/src/zopfli/deflate.c",
+                 "/home/zhechev/Developer/SIP/phase6/Docker/dataset/src/zopfli/src/zopfli/gzip_container.c",
+                 "/home/zhechev/Developer/SIP/phase6/Docker/dataset/src/zopfli/src/zopfli/hash.c",
+                 "/home/zhechev/Developer/SIP/phase6/Docker/dataset/src/zopfli/src/zopfli/katajainen.c",
+                 "/home/zhechev/Developer/SIP/phase6/Docker/dataset/src/zopfli/src/zopfli/lz77.c",
+                 "/home/zhechev/Developer/SIP/phase6/Docker/dataset/src/zopfli/src/zopfli/squeeze.c",
+                 "/home/zhechev/Developer/SIP/phase6/Docker/dataset/src/zopfli/src/zopfli/tree.c",
+                 "/home/zhechev/Developer/SIP/phase6/Docker/dataset/src/zopfli/src/zopfli/util.c",
+                 "/home/zhechev/Developer/SIP/phase6/Docker/dataset/src/zopfli/src/zopfli/zlib_container.c",
+                 "/home/zhechev/Developer/SIP/phase6/Docker/dataset/src/zopfli/src/zopfli/zopfli_lib.c",
+                 "/home/zhechev/Developer/SIP/phase6/Docker/dataset/src/zopfli/src/zopfli/zopfli_bin.c"],
     "hashVariables" : 5,
     "checksPerHashVariable": 1,
-    "obfuscationLevel":0.2,
+    "obfuscationLevel":0,
     "debug" : true,
 
-    "functionsRC" : ["mul", "add", "sub"],
+    "functionsRC" : ["CeilDiv", "GetLengthScore"],
     "connectivity" : 2,
     "syminputC" : "../phase3/Docker/klee/syminputC.py",
     "syminputBC" : "../phase3/Docker/klee/syminputBC.py",
     "verbose" : true,
 
-    "functionsCFI" : ["mul", "add", "sub"]
+    "functionsCFI" : ["CeilDiv", "GetLengthScore"]
 }

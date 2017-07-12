@@ -20,6 +20,7 @@ independentInputPass="${libs}libInputDependency.so"
 # Passes' libraries and files
 cfiLibrary="../phase2/llvm-callpath-pass/${build}libcheck.o ../phase2/llvm-callpath-pass/${build}crypto.o"
 libssl="-L/usr/lib/x86_64-linux-gnu/ -lssl -lcrypto"
+libbacktrace="-L/usr/lib/gcc/x86_64-linux-gnu/5 -lbacktrace" 
 rcLibrary="../phase3/stins4llvm/${build}libcheck.o"
 funcsToCheckFile="${build}functionsCFI"
 ohOutputFile="/tmp/output.data"
@@ -71,19 +72,19 @@ function printFuncsToCheck {
 function CFI {
     LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libssl.so \
     ${OPT} -load ${cfiPass} \
-        "${build}${resultFile}${fileVersion}.bc" -callpath -ff ${funcsToCheckFile} -o "${build}${resultFile}${fileVersion+1}.bc"
+        "${build}${resultFile}${fileVersion}.bc" -callpath -ff ${funcsToCheckFile} -o "${build}${resultFile}$((fileVersion+1)).bc"
     exitIfFail $?
 }
 
 function RC {
     ${OPT} -load ${rcPass} \
-        "${build}${resultFile}${fileVersion}.bc" -stateProtect -ff $config -o "${build}${resultFile}${fileVersion+1}.bc"
+        "${build}${resultFile}${fileVersion}.bc" -stateProtect -ff $config -o "${build}${resultFile}$((fileVersion+1)).bc"
     exitIfFail $?
 }
 
 function OH {
     ${OPT} -load ${independentInputPass} -load ${ohPass} \
-        "${build}${resultFile}${fileVersion}.bc" -OHProtect -ff $config -o "${build}${resultFile}${fileVersion+1}.bc"
+        "${build}${resultFile}${fileVersion}.bc" -OHProtect -ff $config -o "${build}${resultFile}$((fileVersion+1)).bc"
     exitIfFail $?
 }
 
@@ -118,7 +119,7 @@ function executeProtection {
             echo "$mode does not recognised!"
             continue
         fi
-
+        
         echo "Protecting in $mode mode..."
 
         if [ $mode == "OH" ]; then
@@ -130,15 +131,17 @@ function executeProtection {
             printFuncsToCheck
             CFI
             compilerFlagsFront+=" ${cfiLibrary} "
-            compilerFlagsBack+=" ${libssl} "
+            compilerFlagsBack+=" ${libssl} ${libbacktrace} "
         fi
 
         if [ $mode == "RC" ]; then
             RC
             compilerFlagsFront+=" ${rcLibrary} "
+            compilerFlagsBack+=" ${libbacktrace} "
         fi
-
-        fileVersion=${fileVersion+1}
+      
+        fileVersion=$((fileVersion+1))
+        
         echo "Done protecting in $mode mode"
     done
 }
@@ -183,7 +186,7 @@ clangFlags=$(jq -r 'select(.clangFlags != null) .clangFlags' $config)
 exitIfFail $?
 
 # Generate bc files
-${CLANG} -c -emit-llvm ${inputCFiles} $clangFlags -O0
+${CLANG} $clangFlags -c -g -fno-inline -emit-llvm ${inputCFiles}  -O0
 exitIfFail $?
 
 ${LINK} $inputBCFiles -o "${build}${resultFile}${fileVersion}.bc"
@@ -196,11 +199,11 @@ exitIfFail $?
 executeProtection inputmodes[@]
 
 # Generate object
-${LLC} -filetype=obj "${build}${resultFile}${fileVersion}.bc"
+${LLC} -O0 -inline-threshold=0 -disable-preinline -preinline-threshold=0 -inlinehint-threshold=0 -inlinecold-threshold=0  -filetype=obj "${build}${resultFile}${fileVersion}.bc"
 exitIfFail $?
 
 # Link
-${CXX} -rdynamic "${build}${resultFile}${fileVersion}.o" $compilerFlagsFront -o ${build}${resultFile} $compilerFlagsBack
+${CXX} -O0 -fkeep-inline-functions -fno-implicit-inline-templates -fno-implement-inlines -fno-default-inline -finline-limit=0 -fno-inline -g -rdynamic "${build}${resultFile}${fileVersion}.o" $compilerFlagsFront -o ${build}${resultFile} $compilerFlagsBack
 exitIfFail $?
 
 # Patch if necessary

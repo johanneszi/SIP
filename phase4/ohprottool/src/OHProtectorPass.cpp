@@ -10,6 +10,7 @@
 #include "llvm/Analysis/CallGraph.h"
 #include "llvm/Analysis/LoopInfo.h"
 #include "input-dependency/InputDependencyAnalysis.h"
+#include "input-dependency/InputDependentFunctions.h"
 
 #include <string>
 #include <vector>
@@ -110,12 +111,14 @@ namespace {
     void OHProtectorPass::getAnalysisUsage(AnalysisUsage &AU) const {
         AU.setPreservesAll();
         AU.addRequired<input_dependency::InputDependencyAnalysis>();
+        AU.addRequired<input_dependency::InputDependentFunctionsPass>();
         AU.addRequired<LoopInfoWrapperPass>();
         AU.addRequired<CallGraphWrapperPass>();
     }
 
     bool OHProtectorPass::runOnModule(Module &M) {
-        const auto &input_dependency_info = getAnalysis<input_dependency::InputDependencyAnalysis>();
+        const auto& input_dependency_info = getAnalysis<input_dependency::InputDependencyAnalysis>();
+        const auto& function_calls = getAnalysis<input_dependency::InputDependentFunctionsPass>();
 		
         LLVMContext &ctx = M.getContext();
         IRBuilder<> builder(ctx);
@@ -127,7 +130,12 @@ namespace {
         // insert would add loads, stores and add that would be protected afterwards adding the same again
         for (auto &F : M) {
             // No input dependency info for declarations
-            if (F.isDeclaration()) {
+            if (F.isDeclaration() || F.isIntrinsic()) {
+                continue;
+            }
+            
+            // no hashes for functions called from non deterministc blocks
+            if (function_calls.is_function_input_dependent(&F)) {
                 continue;
             }
 
@@ -136,6 +144,7 @@ namespace {
                     // Only add instructions that should be protected (Load/Store/ICmp/Add/Sub) and that are not input dependent
                     if (shouldProtect(&I) && !input_dependency_info.isInputDependent(&I)) {
                         instToProtect.push_back(&I);
+                        errs() << I << "\n";
                     }
                 }
             }
@@ -174,7 +183,8 @@ namespace {
                     continue;
                 }
                 
-                if (getCallGraphForFunction(CG, &F) != 1) { continue; }
+                if (std::find(ENTRYPOINTS.begin(), ENTRYPOINTS.end(), F.getName()) == ENTRYPOINTS.end() &&
+                    getCallGraphForFunction(CG, &F) != 1) { continue; }
 
                 loops_info = &getAnalysis<LoopInfoWrapperPass>(F).getLoopInfo();
 
@@ -281,13 +291,13 @@ namespace {
                     exit(1); // All defined instructions have to be protected!
             }
 
-            Value *alloc = builder->CreateAlloca(int32Ty);
+            //Value *alloc = builder->CreateAlloca(int32Ty);
             Value *casted = builder->CreateIntCast(toCast, int32Ty, false);
-            builder->CreateStore(casted, alloc);
-            LoadInst *loadResult = builder->CreateLoad(alloc);
-            BinaryOperator *hash = generateHashFunction(builder, loadResult, loadGlobal);
+            //builder->CreateStore(casted, alloc);
+            //LoadInst *loadResult = builder->CreateLoad(alloc);
+            BinaryOperator *hash = generateHashFunction(builder, casted, loadGlobal);
             StoreInst *storeGlobal = builder->CreateStore(hash, currentGlobal);
-
+            /*
             if (I->getOpcode() == Instruction::ICmp) {
                 LoadInst *loadResult = builder->CreateLoad(alloc);
 
@@ -297,7 +307,7 @@ namespace {
                 }
 
                 nextBrInst->setOperand(0, builder->CreateICmpNE(loadResult, builder->getInt32(0)));
-            }
+            }*/
 
             // Save inserted protection instruction to be protected in
             // one last run
