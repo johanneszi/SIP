@@ -54,6 +54,8 @@ void enqueue( pos position )
    newpos->x = position.x;
    newpos->y = position.y;
    newnode->position = newpos;
+   newnode->next = NULL;
+   newnode->prev = NULL;
 
    if( front == NULL && back == NULL )
        front = back = newnode;

@@ -129,14 +129,15 @@ void setup_level (screen_t *screen, snake_t *snake, int level)
 {
    int i, row, col;
 
-   srand ((unsigned int)time (NULL));
-
+   //srand ((unsigned int)time (NULL));
+   srand (0);
    /* Initialize on (re)start */
    if (1 == level)
    {
       screen->score = 0;
       screen->obstacles = 4;
       screen->level = 1;
+      screen->high_score = 0;
       snake->speed = 14;
       snake->dir = RIGHT;
    }
