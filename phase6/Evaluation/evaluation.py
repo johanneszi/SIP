@@ -1,41 +1,8 @@
+import time
+from processtimer import ProcessTimer
 import json
 import subprocess
 import resource
-
-class ResourcePopen(subprocess.Popen):
-    def _try_wait(self, wait_flags):
-        """All callers to this function MUST hold self._waitpid_lock."""
-        try:
-            (pid, sts, res) = _eintr_retry_call(os.wait4, self.pid, wait_flags)
-        except OSError as e:
-            if e.errno != errno.ECHILD:
-                raise
-            # This happens if SIGCLD is set to be ignored or waiting
-            # for child processes has otherwise been disabled for our
-            # process.  This child is dead, we can't get the status.
-            pid = self.pid
-            sts = 0
-        else:
-            self.rusage = res
-        return (pid, sts)
-
-def resource_call(*popenargs, timeout=None, **kwargs):
-    """Run command with arguments.  Wait for command to complete or
-    timeout, then return the returncode attribute and resource usage.
-
-    The arguments are the same as for the Popen constructor.  Example:
-
-    retcode, rusage = call(["ls", "-l"])
-    """
-    with ResourcePopen(*popenargs, **kwargs) as p:
-        try:
-            retcode = p.wait(timeout=timeout)
-            return [retcode, p.rusage]
-        except:
-            p.kill()
-            p.wait()
-            raise
-
 
 runscript = "/home/zhechev/Developer/SIP/phase6/run.sh"
 composition = ["OH", "RC", "CFI", "SC", "OH+CFI", "OH+SC", "OH+RC+CFI", "OH+RC+CFI+SC"]
@@ -48,8 +15,10 @@ dataset = { "micro-snake": {
                 "functionsRC": []
             },
             "csnake": {
+
                 "source": ["/home/zhechev/Developer/SIP/phase6/Docker/dataset/src/c-snake/snake.c"],
                 "binary": "csnake-rewritten",
+                "clangFlags" : "",
                 "gccFlags": "-lncurses",
                 "functionsCFI": [],
                 "functionsRC": []
@@ -95,15 +64,30 @@ config = {
 
 for program in dataset.keys():  
     config["binary"] = dataset[program]["binary"]
-    config["clangFlags"] = dataset[program]["flags"]
+    config["clangFlags"] = dataset[program]["clangFlags"]
     config["program"] = dataset[program]["source"]
     config["functionsRC"] = dataset[program]["functionsRC"]
     config["functionsCFI"] = dataset[program]["functionsCFI"]
-    
+
     for mode in composition:
         config["modes"] = mode.split("+")
         with open("config.json", "w") as f:
             f.write(json.dumps(config))
-        result = resource_call(['ls', '-l']) #([runscript, "-f", "config.json"])
-        print('spam used {}s of system time'.format(result[1].ru_stime))
+
+        ptimer = ProcessTimer(['./zopfli','processtimer.py'])
+        try:
+            ptimer.execute()
+            #poll as often as possible; otherwise the subprocess might
+            # "sneak" in some extra memory usage while you aren't looking
+            while ptimer.poll():
+                time.sleep(.001)
+        finally:
+            #make sure that we don't leave the process dangling?
+            ptimer.close()
+
+        print('return code:',ptimer.p.returncode)
+        print('time:', ptimer.t1)
+        print('max_vms_memory:',ptimer.max_vms_memory)
+        print('max_rss_memory:',ptimer.max_rss_memory)
+
         exit()
