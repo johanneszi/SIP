@@ -75,8 +75,12 @@ RUN git clone --depth 1 --branch 1.8.1  https://github.com/open-source-parsers/j
 
 # Install radare2
 RUN git clone --depth 1 https://github.com/radare/radare2.git && \
-    sh /home/sip/radare2/sys/install.sh && \
-    pip3 install r2pipe
+    sh /home/sip/radare2/sys/install.sh
+
+# Install r2pipe and psutil
+RUN pip3 install --upgrade pip && \
+    pip3 install --upgrade r2pipe && \
+    pip3 install --upgrade psutil
 
 # Install pwntools
 RUN pip install --upgrade pip && \

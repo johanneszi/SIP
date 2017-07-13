@@ -16,6 +16,8 @@
 #include "llvm/Support/CommandLine.h"
 #include "llvm/IR/TypeBuilder.h"
 
+#include "llvm/IR/DebugInfo.h"
+
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/LLVMContext.h"
 
@@ -86,7 +88,11 @@ namespace{
 					builder.SetInsertPoint(&block, builder.GetInsertPoint());
 
 					Value *strPtr = builder.CreateGlobalStringPtr(funcName.c_str());
-					builder.CreateCall(registerFunction, strPtr);
+					Value *caller = builder.CreateCall(registerFunction, strPtr);
+					DISubprogram *d = function.getSubprogram();
+					DebugLoc loc = DebugLoc::get(0, 0, d);
+					((Instruction *)caller)->setDebugLoc(loc);
+
 					modified = true;
 					first_instr = false;
 
@@ -98,7 +104,10 @@ namespace{
 
 						// Insert call
 						builder.SetInsertPoint(&block, builder.GetInsertPoint());
-						builder.CreateCall(verifyFunction);
+						Value *caller = builder.CreateCall(verifyFunction);
+						DISubprogram *d = function.getSubprogram();
+						DebugLoc loc = DebugLoc::get(0, 0, d);
+						((Instruction *)caller)->setDebugLoc(loc);
 					}
 				}
 				if (auto *callInstruction = dyn_cast<CallInst>(&instruction)) {
@@ -126,7 +135,11 @@ namespace{
 
 					// Insert a call to our function.
 					Value *strPtr = builder.CreateGlobalStringPtr(funcName.c_str());
-					builder.CreateCall(deregisterFunction, strPtr);
+					Value *caller = builder.CreateCall(deregisterFunction, strPtr);
+					DISubprogram *d = function.getSubprogram();
+					DebugLoc loc = DebugLoc::get(0, 0, d);
+					((Instruction *)caller)->setDebugLoc(loc);
+
 					modified = true;
 				}
 			}

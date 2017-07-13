@@ -5,7 +5,7 @@ import os
 
 path = "/home/zhechev/Developer/SIP/phase6/"
 runscript = path + "run.sh"
-composition = ["OH", "CFI", "SC", "OH+CFI", "OH+SC", "RC+CFI+OH", "RC+CFI+OH+SC"]
+composition = ["OH", "RC", "CFI", "SC", "OH+CFI", "OH+SC", "RC+CFI+OH", "RC+CFI+OH+SC"]
 
 dataset = {"micro-snake": {
                 "source": [path + "Docker/dataset/src/micro-snake/snake.c"],
