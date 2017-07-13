@@ -22,8 +22,6 @@
 #ifndef __SNAKE_H__
 #define __SNAKE_H__
 
-#define VERSION "1.00"
-
 #define GOLD      '$'
 #define CACTUS    '*'
 

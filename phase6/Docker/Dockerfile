@@ -20,6 +20,7 @@ RUN apt-get update && apt-get install -y \
     locales \
     nano \
     python-minimal python3 python3.5-dev python3-pip \
+    python2.7 python-pip python-dev \
     subversion \
     sudo \
     vim \
@@ -67,7 +68,7 @@ RUN git clone -b ktest-result --depth 1 https://github.com/tum-i22/macke-opt-llv
 	KLEE_INCLUDES=/home/sip/build/klee/include
 
 # Install jsoncpp
-RUN git clone --depth 1 https://github.com/open-source-parsers/jsoncpp.git && \
+RUN git clone --depth 1 --branch 1.8.1  https://github.com/open-source-parsers/jsoncpp.git && \
     mkdir -p /home/sip/jsoncpp/build && \
     cmake -H/home/sip/jsoncpp -B/home/sip/jsoncpp/build && \
     make -C /home/sip/jsoncpp/build -j 2 install
@@ -76,6 +77,10 @@ RUN git clone --depth 1 https://github.com/open-source-parsers/jsoncpp.git && \
 RUN git clone --depth 1 https://github.com/radare/radare2.git && \
     sh /home/sip/radare2/sys/install.sh && \
     pip3 install r2pipe
+
+# Install pwntools
+RUN pip install --upgrade pip && \
+    pip install --upgrade pwntools
 
 # Copy input-dependency pass files
 COPY input-dependency-pass/include/ /usr/local/include/

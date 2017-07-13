@@ -20,30 +20,29 @@ class Instruction:
         if address:
             seek(address)
         instruction = r2.cmdj('pdj 1')
-        # print(instruction)
+
         instruction = instruction[0]
         self.type = instruction['type'] if instruction.get('type') else None
         self.size = instruction['size'] if instruction.get('size') else None
         self.jump = instruction['jump'] if instruction.get('jump') else None
 
 def patchPrintfCall(start, printfAddress):
-    
+
     address = start
     while True:
         seek(address)
         instruction = Instruction()
-        #print(instruction.type)
+
         if instruction.type == 'call' and instruction.jump == printfAddress:
             # Patch the print call that prints the hash value
             # Instead of adding NOPs add Addtitions or ORs that do nothing
-            print("Found call")
             rando = randNum()
             cmd = ''
             if rando > 50:
                 cmd = '\"wa add edx, ' + str(hex(rando)) + ';and edx, edi\"'
             else:
                 cmd = '\"wa sub edx, ' + str(hex(rando)) + ';or edx, edi\"'
-                
+
             r2.cmd(cmd)
             break
         address += instruction.size
@@ -54,10 +53,9 @@ def patchCmp(start, hash):
     while True:
         seek(address)
         instruction = Instruction()
-        #print(instruction.type)
+
         if instruction.type == 'cmp':
             # Patch the result comparison
-            print(instruction.size)
             if instruction.size == 5:
                 seek(address + 1)
             elif instruction.size == 6:
@@ -104,7 +102,7 @@ def findPrintf():
     for symbol in r2.cmdj('isj'):
         if 'imp.printf' in symbol['name']:
             return symbol['vaddr']
-    raise Exception("Printf not found!") 
+    raise Exception("Printf not found!")
 
 if __name__ == "__main__":
     hashes = []
@@ -124,24 +122,21 @@ if __name__ == "__main__":
         if not result:
             print("Nothing found!")
             continue
-        
+
         printfAddress = findPrintf()
-        
-        print(result)
+
         # for res in result:
         address = result[0]['offset']
-        for i in range(4):
+        for i in range(1, 4):
             inst = Instruction(address-i)
             if inst.type == 'mov':
-                print(inst.type)
-                #patchPrintfCall(address-i, printfAddress)
+                patchPrintfCall(address-i, printfAddress)
                 break
         address = result[1]['offset']
-        
+
         for i in range(1, 4):
             inst = Instruction(address-i)
             if inst.type == 'cmp' and (5 <= inst.size <=7) :
-                print(inst.type)
                 patchCmp(address-i, hash)
                 break
     r2.quit()

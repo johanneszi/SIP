@@ -1,7 +1,8 @@
 {
-    "modes" : ["OH"],
+    "modes" : ["RC"],
     "binary" : "zopfli-rewritten",
     "clangFlags" : "-W -Wall -Wextra -ansi -pedantic -O2 -Wno-unused-function",
+    "gccFlags" : "-lncurses",
     
     "program" : ["/home/zhechev/Developer/SIP/phase6/Docker/dataset/src/zopfli/src/zopfli/blocksplitter.c",
                  "/home/zhechev/Developer/SIP/phase6/Docker/dataset/src/zopfli/src/zopfli/cache.c", 
@@ -18,7 +19,7 @@
                  "/home/zhechev/Developer/SIP/phase6/Docker/dataset/src/zopfli/src/zopfli/zopfli_bin.c"],
     "hashVariables" : 5,
     "checksPerHashVariable": 1,
-    "obfuscationLevel":0,
+    "obfuscationLevel":0.2,
     "debug" : true,
 
     "functionsRC" : ["CeilDiv", "GetLengthScore"],

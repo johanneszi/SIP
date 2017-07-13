@@ -7,6 +7,7 @@
 namespace llvm {
 class Function;
 class BasicBlock;
+class CallGraph;
 }
 
 namespace input_dependency {
@@ -31,10 +32,13 @@ public:
 
 public:
     bool is_function_input_dependent(llvm::Function* F) const;
+    bool is_function_input_independent(llvm::Function* F) const;
 
 private:
     using FunctionSet = std::unordered_set<llvm::Function*>;
 
+    std::vector<llvm::Function*> collect_functons(llvm::Module& M);
+    void erase_from_deterministic_functions(const FunctionSet& targets);
     void process_non_det_block(llvm::BasicBlock& block,
                                const IndirectCallSitesAnalysisResult& indirectCallSitesInfo);
     void process_function(llvm::Function* F,
@@ -50,7 +54,9 @@ private:
                       FunctionSet& processed_functions);
 
 private:
+    FunctionSet functions_called_in_loop;
     FunctionSet functions_called_in_non_det_blocks;
+    FunctionSet functions_called_in_det_blocks;
 };
 
 }
