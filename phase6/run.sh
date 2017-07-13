@@ -90,7 +90,13 @@ function OH {
 
 function ohPatch {
     if [ $ohExecuted == true ]; then
-        ./${build}${resultFile} |& tee $ohOutputFile
+        execute=$(jq -r 'select(.execution != null) .execution' $config)
+
+        if [[ -z "${execute// }" ]]; then
+            execute="./${build}${resultFile}"
+        fi
+        
+        ${execute} |& tee $ohOutputFile
         exitIfFail $?
 
         python3 $ohPatcher ${build}${resultFile} $ohOutputFile
@@ -185,7 +191,7 @@ exitIfFail $?
 clangFlags=$(jq -r 'select(.clangFlags != null) .clangFlags' $config)
 exitIfFail $?
 
-gccFlags=$(jq -r 'select(.gccFlags != null) .clangFlags' $config)
+gccFlags=$(jq -r 'select(.gccFlags != null) .gccFlags' $config)
 exitIfFail $?
 
 # Generate bc files
