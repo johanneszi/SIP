@@ -93,11 +93,12 @@ COPY input-dependency-pass/lib/ /usr/local/lib/
 # Copy dataset files
 COPY dataset/ /home/sip/dataset
 
-# Copy cfi default protection and install
+# Copy cfi and stins4llvm default protections and install them
 COPY defaultProtection /home/sip/defaultProtection
 RUN mkdir -p /home/sip/defaultProtection/cfi/build && \
     cmake -H/home/sip/defaultProtection/cfi -B/home/sip/defaultProtection/cfi/build && \
-    make -C /home/sip/defaultProtection/cfi/build -j 2
+    make -C /home/sip/defaultProtection/cfi/build -j 2 && \
+    make -C /home/sip/defaultProtection/stins4llvm -j 2
 
 # Install self-checking default protection
 RUN git clone --depth 1 https://github.com/anahitH/self-checksumming.git /home/sip/defaultProtection/self-checksumming && \

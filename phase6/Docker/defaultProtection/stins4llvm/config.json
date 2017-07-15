@@ -1,0 +1,10 @@
+{
+    "functionsRC" : ["mul", "add", "sub","isValidLicenseKey", "addChar"],
+    "program" : ["src/InterestingProgram.c"],
+    "binary" : "InterestingProgram-rewritten",
+    "clangFlags" : "-W -Wall -Wextra -ansi -pedantic -O2 -Wno-unused-function",
+    "connectivityRC" : 2,
+    "syminputC" : "/home/sip/defaultProtection/stins4llvm/src/syminputC.py",
+    "syminputBC" : "/home/sip/defaultProtection/stins4llvm/src/syminputBC.py",
+    "verbose" : true
+}
