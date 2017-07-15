@@ -1,83 +1,88 @@
 #include <algorithm>
 #include <cstring>
 #include <iostream>
-#include <execinfo.h>
 #include <openssl/sha.h>
+#include "backtrace.h"
+#include "backtrace-supported.h"
 
 #include "crypto.h"
 
-#define STACKTRACE 256
+#define DEBUG 0
 
-const std::string libcStartMain = "__libc_start_main";
+static void backtraceErrorCallback(void *vdata, const char *msg, int errnum) {
+    fprintf (stderr, "%s", msg);
+    if (errnum > 0)
+        fprintf (stderr, ": %s", strerror (errnum));
+    fprintf (stderr, "\n");
+}
 
+static void backtraceCallbackCreate(void *data, const char *msg, int errnum) {
+    fprintf (stderr, "%s", msg);
+    if (errnum > 0)
+        fprintf (stderr, ": %s", strerror (errnum));
+    fprintf (stderr, "\n");
+
+    exit (EXIT_FAILURE);
+}
+
+static int collectBacktrace (void *vdata, uintptr_t pc,
+          const char *filename, int lineno, const char *function) {
+
+    std::vector<std::string> *data = (std::vector<std::string> *) vdata;
+    if (function != NULL) {
+        std::vector<std::string>::iterator position = std::find(data->begin(), data->end(), function);
+
+        if (position != data->end()) {
+            data->erase(position);
+        }
+
+        data->push_back(function);
+    }
+
+    return 0;
+}
+
+backtrace_state *backtrace_state = backtrace_create_state("", BACKTRACE_SUPPORTED, backtraceCallbackCreate, NULL);
 // Calculate backtrace
 std::vector<std::string> stackTrace() {
-	std::vector<std::string> trace;
-	void *array[STACKTRACE];
-	size_t size;
-	std::string start;
+    std::vector<std::string> trace;
+    backtrace_full (backtrace_state, 2, collectBacktrace, backtraceErrorCallback, &trace); // Skip the first two frames
 
-	// get void*'s for all entries on the stack
-	size = backtrace(array, STACKTRACE);
+    size_t size = trace.size();
+    std::string start = size == 0 ? "" : trace.front();
 
-	char **traces = backtrace_symbols(array, size);
+    std::reverse(trace.begin(), trace.end());
 
-	// Skip the check and stackTrace
-	for(unsigned int i = 2; i < size; i++) {
-		char *begin = traces[i];
+    unsigned int i = 0;
+    while (i < size && trace[i] != start) { i++; };
+    trace.erase(trace.begin() + i + 1, trace.end());
 
-		for (char* p = traces[i]; *p; p++) {
-			if (*p == '(')
-				begin = p + 1;
-			else if(*p == '+') {
-				*p = '\0';
-				break;
-			}
-		}
+    #if DEBUG
+    for (auto func : trace) {
+        std::cout << func << " ";
+    }
+    std::cout << std::endl;
+    #endif
 
-		std::string funcName(begin);
-
-		if (i == 2) {
-			start = funcName;
-		}
-
-		// Skip libc functions
-		if (funcName == libcStartMain) {
-			break;
-		}
-
-		std::vector<std::string>::iterator position = std::find(trace.begin(), trace.end(), funcName);
-
-		if (position != trace.end()) {
-			trace.erase(position);
-		}
-
-		trace.push_back(funcName);
-	}
-
-	std::reverse(trace.begin(), trace.end());
-
-	std::vector<std::string>::iterator position = std::find(trace.begin(), trace.end(), start);
-	if (position != trace.end()) {
-		trace.erase(++position, trace.end());
-	}
-
-	return trace;
+    return trace;
 }
 
 extern "C" bool check(char *validHash, bool hasToCheck) {
-	if (!hasToCheck) {
-		std::vector<std::string> currentTrace = stackTrace();
-		std::string hash = sha256(currentTrace);
+    if (!hasToCheck) {
+        std::vector<std::string> currentTrace = stackTrace();
+        std::string hash = sha256(currentTrace);
 
-		return std::memcmp(validHash, hash.c_str(), SHA256_DIGEST_LENGTH) == 0;
-	}
+        return std::memcmp(validHash, hash.c_str(), SHA256_DIGEST_LENGTH) == 0;
+    }
 
-	return true;
+    return true;
 }
 
 extern "C" void reporter(bool valid) {
-	if (!valid) {
-		std::cout << "Hash corrupted!" << std::endl;
-	}
+    if (!valid) {
+        std::cout << "Hash corrupted!" << std::endl;
+        exit(1);
+    }
 }
+
+#undef DEBUG

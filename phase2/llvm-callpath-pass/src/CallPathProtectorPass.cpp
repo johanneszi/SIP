@@ -27,6 +27,7 @@ namespace {
 	const std::string USAGE = "Specify file containing new line separated functions to protect.";
 
 	const cl::opt<std::string> FILENAME("ff", cl::desc(USAGE.c_str()));
+	const cl::opt<bool> VERBOSE ("vv", cl::desc("Outputs the LLMV generated CallGraph."));
 
 	struct CallPathProtectorPass : public ModulePass {
 		static char ID;
@@ -111,6 +112,10 @@ namespace {
 		if (CG == nullptr) {
 			errs() << ERROR << " No CallGraph can be generated!\n";
 			return false;
+		}
+
+		if (VERBOSE) {
+			CG->dump();
 		}
 
 		// Traverse all functions which have to be protected
@@ -207,7 +212,7 @@ namespace {
 					// Check if we have already seen self to break circles
 					if(std::find(seen.begin(), seen.end(), callingFunction->getName()) == seen.end()) {
 						VecInVec oldCalls = getCall(CG, callingFunction->getName(), seen);
-						calls.insert(std::end(calls), std::begin(oldCalls), std::end(oldCalls));
+						calls.insert(calls.end(), oldCalls.begin(), oldCalls.end());
 
 						break;
 					}
@@ -234,7 +239,7 @@ namespace {
 			for(int i = 0; i < size - 1; i++) {
 				errs() << callPath[i] << " -> ";
 			}
-			errs() << callPath[callPath.size() - 1] << "\n";
+			errs() << callPath[size - 1] << "\n";
 		}
 	}
 }

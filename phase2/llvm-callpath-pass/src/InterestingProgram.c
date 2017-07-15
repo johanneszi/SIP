@@ -1,9 +1,6 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
-void InterestingProcedure() {
-	printf("\t This is an interesting procedure\n");
-}
 
 void a();
 void b();
@@ -11,34 +8,39 @@ void c();
 void d();
 void e();
 
+void InterestingProcedure() {
+    printf("\t This is an interesting procedure\n");
+}
+
+void print(char *message) {
+    InterestingProcedure();
+    printf("%s\n", message);
+}
+
 void a() {
-	b();
+    b();
 }
 
 void b() {
-	c();
+    c();
 }
 
 void c() {
-	d();
+    d();
 }
 
 void d() {
-	e();
+    e();
 }
 
 void e() {
-	InterestingProcedure();
-}
-void print(char *message) {
-	InterestingProcedure();
-	printf("%s\n", message);
+    print("\t Not an interesting procedure");
 }
 
 int main(int argc, char** argv) {
-	char inp[8];
-	InterestingProcedure();
-	a();
-	gets(inp);
-	return 0;
+    char inp[8];
+    InterestingProcedure();
+    a();
+    gets(inp);
+    return 0;
 }

@@ -6,7 +6,7 @@ BUILD = build/
 CXX = g++
 
 CXXFLAGS = -g -rdynamic
-CXXFLAGS_LLVM = -fno-rtti -rdynamic -O3 $(LLVM_INCLUDES)
+CXXFLAGS_LLVM = -fno-rtti -O3 $(LLVM_INCLUDES)
 
 LLVM_CONFIG_COMMAND = \
 		`/usr/bin/llvm-config-3.9 --cxxflags --libs` \
@@ -22,10 +22,10 @@ directories:
 	@ mkdir -p $(BUILD)
 
 $(BUILD)%.o: $(SOURCE)%.cpp
-	$(CXX) -c -fPIC -std=c++11 $(CXXFLAGS_LLVM) $(LLVM_CONFIG_COMMAND) $^ -o $@
+	$(CXX) -c -fPIC -std=c++11 $(CXXFLAGS) $(CXXFLAGS_LLVM) $(LLVM_CONFIG_COMMAND) $^ -o $@
 
 $(BUILD)libCallPathProtectorPass.so: $(BUILD)CallPathProtectorPass.o
-	$(CXX) -std=c++11 $(BUILD)crypto.o $(CXXFLAGS_LLVM) -shared $(LLVM_CONFIG_COMMAND) $^ -o $@
+	$(CXX) $(BUILD)crypto.o $(CXXFLAGS_LLVM) -shared $(LLVM_CONFIG_COMMAND) $^ -o $@
 
 .PHONY: clean
 clean:
