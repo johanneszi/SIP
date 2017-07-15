@@ -114,8 +114,8 @@ vector<Vertex> Graph::getSensitiveNodes() {
 }
 
 void rewriteStackAnalysis(string checksum) {
-	ifstream filein("../code/StackAnalysis.c"); //File to read from
-	ofstream fileout("../code/NewStackAnalysis.c"); //Temporary file
+	ifstream filein("/home/sip/defaultProtection/cfi/code/StackAnalysis.c"); //File to read from
+	ofstream fileout("/home/sip/defaultProtection/cfi/code/NewStackAnalysis.c"); //Temporary file
 	if(!filein || !fileout){
 		cout << "Error opening files!" << endl;
 		return;

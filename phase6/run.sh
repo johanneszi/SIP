@@ -11,14 +11,18 @@ CXX=g++
 build="build/"
 libs="/usr/local/lib/"
 
+# SC tool
+sctool="/home/sip/defaultProtection/self-checksumming/build/src/self-checksumming"
+scpatcher="/home/sip/defaultProtection/self-checksumming/modify.py"
+
 # Passes
-cfiPass="../phase2/llvm-callpath-pass/${build}libCallPathProtectorPass.so"
+cfiPass="/home/sip/defaultProtection/cfi/build/code/libFunctionPass.so"
 rcPass="../phase3/stins4llvm/${build}libStateProtectorPass.so"
 ohPass="../phase4/ohprottool/${build}libOHProtectorPass.so"
 independentInputPass="${libs}libInputDependency.so"
 
 # Passes' libraries and files
-cfiLibrary="../phase2/llvm-callpath-pass/${build}libcheck.o ../phase2/llvm-callpath-pass/${build}crypto.o"
+cfiStack="/home/sip/defaultProtection/cfi/code/NewStackAnalysis.c"
 libssl="-L/usr/lib/x86_64-linux-gnu/ -lssl -lcrypto"
 libbacktrace="-L/usr/lib/gcc/x86_64-linux-gnu/5 -lbacktrace"
 rcLibrary="../phase3/stins4llvm/${build}libcheck.o"
@@ -63,16 +67,43 @@ function makeBuildDir {
 
 function printFuncsToCheck {
     rm $funcsToCheckFile 2> /dev/null
-    for func in $(jq -r '.functionsCFI[]' $config)
+    for func in $(jq -r 'select(.functionsCFI != null) .functionsCFI[]' $config)
     do
         echo $func >> $funcsToCheckFile
     done
 }
 
+function SC {
+    local modes=${!1}
+    local sc="SC"
+    if [[ ! " ${modes[@]} " =~ " ${sc} " ]]; then
+        return 0
+    fi
+
+    echo "Protecting in SC mode..."
+
+    ${sctool} ${build}${resultFile} $2 $3
+    exitIfFail $?
+
+    python $scpatcher "${build}${resultFile}_modified"
+    exitIfFail $?
+
+    mv "${build}${resultFile}_modified" "${build}${resultFile}"
+    exitIfFail $?
+
+    echo "Done protecting in SC mode"
+}
+
 function CFI {
-    LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libssl.so \
     ${OPT} -load ${cfiPass} \
-        "${build}${resultFile}${fileVersion}.bc" -callpath -ff ${funcsToCheckFile} -o "${build}${resultFile}$((fileVersion+1)).bc"
+        "${build}${resultFile}${fileVersion}.bc" -functionpass -i ${funcsToCheckFile} -o "${build}${resultFile}$((fileVersion+1)).bc"
+    exitIfFail $?
+
+    ${CLANG} -g -c -emit-llvm ${cfiStack} -o ${build}NewStackAnalysis.bc
+    exitIfFail $?
+
+    fileVersion=$((fileVersion+1))
+    ${LINK} ${build}NewStackAnalysis.bc "${build}${resultFile}$((fileVersion)).bc" -o "${build}${resultFile}$((fileVersion+1)).bc"
     exitIfFail $?
 }
 
@@ -95,7 +126,7 @@ function ohPatch {
         if [[ -z "${execute// }" ]]; then
             execute="./${build}${resultFile}"
         fi
-        
+
         ${execute} |& tee $ohOutputFile
         exitIfFail $?
 
@@ -122,7 +153,9 @@ function executeProtection {
     for mode in ${!1}
     do
         if [[ ! " ${modes[@]} " =~ " ${mode} " ]]; then
-            echo "$mode is not recognised!"
+            if [ $mode != "SC" ]; then
+                echo "$mode is not recognised!"
+            fi
             continue
         fi
 
@@ -137,7 +170,7 @@ function executeProtection {
             printFuncsToCheck
             CFI
             compilerFlagsFront+=" ${cfiLibrary} "
-            compilerFlagsBack+=" ${libssl} ${libbacktrace} "
+            compilerFlagsBack+=" ${libssl} "
         fi
 
         if [ $mode == "RC" ]; then
@@ -212,8 +245,17 @@ ${LLC} -filetype=obj "${build}${resultFile}${fileVersion}.bc"
 exitIfFail $?
 
 # Link
-${CXX} -g -rdynamic "${build}${resultFile}${fileVersion}.o" $compilerFlagsFront -o ${build}${resultFile} $compilerFlagsBack $gccFlags
+${CXX} -g "${build}${resultFile}${fileVersion}.o" $compilerFlagsFront -o ${build}${resultFile} $compilerFlagsBack $gccFlags
 exitIfFail $?
 
 # Patch if necessary
 ohPatch
+
+connectivitySC=$(jq -r 'select(.connectivitySC != null) .connectivitySC' $config)
+exitIfFail $?
+
+moduleSC=$(jq -r 'select(.module != null) .module' $config)
+exitIfFail $?
+
+# Patch SC if specified
+SC inputmodes[@] $connectivitySC $moduleSC

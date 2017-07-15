@@ -3,7 +3,7 @@ from processtimer import ProcessTimer
 import json
 import os
 
-path = "/home/zhechev/Developer/SIP/phase6/"
+path = "/home/sip/SIP/phase6/"
 runscript = path + "run.sh"
 composition = ["OH", "RC", "CFI", "SC", "OH+CFI", "OH+SC", "RC+CFI+OH", "RC+CFI+OH+SC"]
 
@@ -11,18 +11,15 @@ dataset = {"micro-snake": {
                 "source": [path + "Docker/dataset/src/micro-snake/snake.c"],
                 "binary": "snake-rewritten",
                 "clangFlags": "-W -Wall -Werror -DVERSION=\"1.0.1\"",
-                "functionsCFI": [],
-                "functionsRC": [],
+                "functionsCFI": ["collision", "eat_gold"],
                 "input": path + "Docker/dataset/inputs/micro-snake.in",
                 "execution": "python3 " + path + "Docker/dataset/inputs/ptypipe.py {1} " + path + "build/{0}"
             },
             "csnake": {
                 "source": [path + "Docker/dataset/src/c-snake/snake.c"],
                 "binary": "csnake-rewritten",
-                "clangFlags" : "",
                 "gccFlags": "-lncurses",
-                "functionsCFI": [],
-                "functionsRC": [],
+                "functionsCFI": ["snake_game_over", "snake_in_bounds"],
                 "input": path + "Docker/dataset/inputs/c-snake.in",
                 "execution": "python3 " + path + "Docker/dataset/inputs/ptypipe.py {1} " + path + "build/{0}"
             },
@@ -30,8 +27,7 @@ dataset = {"micro-snake": {
                 "source": [path + "Docker/dataset/src/tetris/tetris.c"],
                 "binary": "teris-rewritten",
                 "clangFlags": "-DENABLE_SCORE -DENABLE_PREVIEW -DENABLE_HIGH_SCORE",
-                "functionsCFI": [],
-                "functionsRC": [],
+                "functionsCFI": ["fits_in", "next_shape"],
                 "input": path + "Docker/dataset/inputs/tetris.in",
                 "execution": "python3 " + path + "Docker/dataset/inputs/ptypipe.py {1} " + path + "build/{0}"
             },
@@ -51,7 +47,7 @@ dataset = {"micro-snake": {
                     path + "Docker/dataset/src/zopfli/src/zopfli/zopfli_bin.c"],
                 "binary": "zopfli-rewritten",
                 "clangFlags": "-W -Wall -Wextra -ansi -pedantic -O2 -Wno-unused-function",
-                "functionsCFI": [],
+                "functionsCFI": ["ZopfliUpdateHash", "AddHuffmanBits"],
                 "functionsRC": ["CeilDiv", "GetLengthScore"],
                 "input": path + "Docker/dataset/inputs/zopfli.in",
                 "execution": path + "build/{0} {1}"
@@ -63,9 +59,10 @@ config = {
     "checksPerHashVariable": 1,
     "obfuscationLevel":0,
     "debug" : False,
-    "connectivity" : 1,
-    "syminputC" : "/home/zhechev/Developer/SIP/phase3/Docker/klee/syminputC.py",
-    "syminputBC" : "/home/zhechev/Developer/SIP/phase3/Docker/klee/syminputBC.py",
+    "connectivityRC" : 1,
+    "connectivitySC" : 1,
+    "syminputC" : path + "../phase3/Docker/klee/syminputC.py",
+    "syminputBC" : path + "../phase3/Docker/klee/syminputBC.py",
     "verbose" : False,
 }
 
@@ -105,12 +102,14 @@ def executeProgram(program):
 
 for program in dataset.keys():
     result = {"program" : program, "Results":[]}
-    config["binary"] = dataset[program]["binary"]
-    config["clangFlags"] = dataset[program]["clangFlags"]
-    config["gccFlags"] = "" if not dataset[program].get("gccFlags") else dataset[program]["gccFlags"]
+
     config["program"] = dataset[program]["source"]
-    config["functionsRC"] = dataset[program]["functionsRC"]
-    config["functionsCFI"] = dataset[program]["functionsCFI"]
+    config["binary"] = dataset[program]["binary"]
+    config["module"] = dataset[program]["binary"]
+    config["clangFlags"] = "" if not dataset[program].get("clangFlags") else dataset[program]["clangFlags"]
+    config["gccFlags"] = "" if not dataset[program].get("gccFlags") else dataset[program]["gccFlags"]
+    config["functionsRC"] = "" if not dataset[program].get("functionsRC") else dataset[program]["functionsRC"]
+    config["functionsCFI"] = "" if not dataset[program].get("functionsCFI") else dataset[program]["functionsCFI"]
 
     exec_input = dataset[program]['input']
     exec_file = dataset[program]['binary']
@@ -134,6 +133,8 @@ for program in dataset.keys():
     unprotected_time, unprotected_memory, unprotected_size = executeProgram(program)
 
     for mode in composition:
+        print("Protecting in " + mode + " mode " + program)
+
         intermediateResult = {"Composition" : mode}
 
         config["modes"] = mode.split("+")
@@ -161,5 +162,5 @@ for program in dataset.keys():
 
         result['Results'] += [intermediateResult]
         print(result)
-        print(program)
+
         writeResult(program, result)
