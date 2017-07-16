@@ -1,6 +1,6 @@
 #include <stdio.h>
-#include <string.h>
 #include <stdlib.h>
+#include <string.h>
 
 void a();
 void b();
@@ -12,7 +12,7 @@ void InterestingProcedure() {
     printf("\t This is an interesting procedure\n");
 }
 
-void print(char *message) {
+void print(char* message) {
     InterestingProcedure();
     printf("%s\n", message);
 }

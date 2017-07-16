@@ -48,20 +48,17 @@
 
 typedef enum { LEFT=0, RIGHT, UP, DOWN, LEFT_TURN, RIGHT_TURN, QUIT, NUM_KEYS } direction_t;
 
-typedef struct
-{
+typedef struct {
    int row, col;
 } snake_segment_t;
 
-typedef struct
-{
+typedef struct {
    direction_t     dir;
 
    snake_segment_t body[MAX_LEN];
 } snake_t;
 
-typedef struct
-{
+typedef struct {
    int level;
    int gold;
    int obstacles;

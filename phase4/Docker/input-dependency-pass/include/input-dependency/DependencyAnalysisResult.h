@@ -39,6 +39,7 @@ public:
     /// \name Abstract interface for getting analysis results
     /// \{
 public:
+    virtual bool isInputDependent(llvm::BasicBlock* bock) const = 0;
     virtual bool isInputDependent(llvm::Instruction* instr) const = 0;
     virtual bool isInputIndependent(llvm::Instruction* instr) const = 0;
     virtual bool hasValueDependencyInfo(llvm::Value* val) const = 0;
@@ -54,6 +55,11 @@ public:
     virtual const GlobalsSet& getReferencedGlobals() const = 0;
     virtual const GlobalsSet& getModifiedGlobals() const = 0;
     virtual void markAllInputDependent() = 0;
+
+    // debug interface
+    virtual long unsigned get_input_dep_count() const = 0;
+    virtual long unsigned get_input_indep_count() const = 0;
+    virtual long unsigned get_input_unknowns_count() const = 0;
     /// \}
 
 protected:

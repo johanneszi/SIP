@@ -1,28 +1,28 @@
-#include "llvm/Pass.h"
 #include "llvm/IR/Function.h"
-#include "llvm/IR/Module.h"
-#include "llvm/IR/Instruction.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/InlineAsm.h"
-#include "llvm/Transforms/Utils/BasicBlockUtils.h"
+#include "llvm/IR/Instruction.h"
+#include "llvm/IR/Module.h"
+#include "llvm/Pass.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/Transforms/Utils/BasicBlockUtils.h"
 
-#include "llvm/Analysis/CallGraph.h"
-#include "llvm/Analysis/LoopInfo.h"
 #include "input-dependency/InputDependencyAnalysis.h"
 #include "input-dependency/InputDependentFunctions.h"
+#include "llvm/Analysis/CallGraph.h"
+#include "llvm/Analysis/LoopInfo.h"
 
+#include <algorithm>
+#include <ctime>
+#include <fstream>
+#include <iterator>
+#include <limits>
+#include <random>
 #include <string>
 #include <vector>
-#include <algorithm>
-#include <fstream>
-#include <random>
-#include <ctime>
-#include <limits>
-#include <iterator>
 
-#include <json/value.h>
 #include <json/reader.h>
+#include <json/value.h>
 
 #define WARNING "\033[43m\033[1mWARNING:\033[0m "
 #define ERROR "\033[101m\033[1mERROR:\033[0m "
@@ -68,16 +68,19 @@ namespace {
         void getAnalysisUsage(AnalysisUsage &AU) const override;
 
         void insertGlobals(Module &M, int numHashVariables);
-        void insertProtection(IRBuilder<> *builder, vector<Instruction *> instuctions, bool finalRun);
+        void insertProtection(IRBuilder<> *builder, vector<Instruction *> instuctions,
+                              bool finalRun);
         void insertCheck(IRBuilder<> *builder, Instruction *inst, GlobalVariable *global, int id);
         void insertGuards(Module &M, IRBuilder<> *builder);
         void insertReportFunction(IRBuilder<> *builder);
-        BinaryOperator* generateHashFunction(IRBuilder<> *builder, Value *operandOne, Value *operandTwo);
+        BinaryOperator *generateHashFunction(IRBuilder<> *builder, Value *operandOne,
+                                             Value *operandTwo);
 
         int getCall(CallGraph *CG, StringRef func, std::vector<std::string> seen);
         int getCallGraphForFunction(CallGraph *CG, Function *func);
 
-        template<typename T> vector<T *> twistGetPartFromVector(vector<T *> input, double percent);
+        template <typename T>
+        vector<T *> twistGetPartFromVector(vector<T *> input, double percent);
         bool isPtrToPtr(Value *value);
         int generateHashVariableID();
         bool shouldProtect(Instruction *instruction);
@@ -99,9 +102,10 @@ namespace {
             putsFunction = M.getOrInsertFunction(PUTSFUNC, FunctionType::get(voidTy, ptrTy, false));
         }
 
-        Type *argsTypes[3] = { ptrTy, int32Ty, int32Ty };
+        Type *argsTypes[3] = {ptrTy, int32Ty, int32Ty};
 
-        printfFunction = M.getOrInsertFunction(PRINTFFUNC, FunctionType::get(voidTy, ArrayRef<Type *>(argsTypes), false));
+        printfFunction = M.getOrInsertFunction(
+            PRINTFFUNC, FunctionType::get(voidTy, ArrayRef<Type *>(argsTypes), false));
 
         srand(time(0));
 
@@ -117,8 +121,9 @@ namespace {
     }
 
     bool OHProtectorPass::runOnModule(Module &M) {
-        const auto& input_dependency_info = getAnalysis<input_dependency::InputDependencyAnalysis>();
-        const auto& function_calls = getAnalysis<input_dependency::InputDependentFunctionsPass>();
+        const auto &input_dependency_info =
+            getAnalysis<input_dependency::InputDependencyAnalysis>();
+        const auto &function_calls = getAnalysis<input_dependency::InputDependentFunctionsPass>();
 
         LLVMContext &ctx = M.getContext();
         IRBuilder<> builder(ctx);
@@ -128,8 +133,10 @@ namespace {
         errs() << "\n=== Independent Instructions which will be protected ===\n";
 
         // Save all input independent instructions which have to be protected
-        // Inserting directly in this iteration would result in an endless loop since each hash function
-        // insert would add loads, stores and add that would be protected afterwards adding the same again
+        // Inserting directly in this iteration would result in an endless loop since each hash
+        // function
+        // insert would add loads, stores and add that would be protected afterwards adding the same
+        // again
         for (auto &F : M) {
             // No input dependency info for declarations
             if (F.isDeclaration() || F.isIntrinsic()) {
@@ -143,7 +150,8 @@ namespace {
 
             for (auto &B : F) {
                 for (auto &I : B) {
-                    // Only add instructions that should be protected (Load/Store/ICmp/Add/Sub) and that are not input dependent
+                    // Only add instructions that should be protected (Load/Store/ICmp/Add/Sub) and
+                    // that are not input dependent
                     if (shouldProtect(&I) && !input_dependency_info.isInputDependent(&I)) {
                         instToProtect.push_back(&I);
                         errs() << I << "\n";
@@ -157,9 +165,11 @@ namespace {
         // Add hash functions to all instructions above
         insertProtection(&builder, instToProtect, false);
 
-        // All added instructions are added to the vector instToObfuscate, the user can specify a percantage of those that should be protected additionally
+        // All added instructions are added to the vector instToObfuscate, the user can specify a
+        // percantage of those that should be protected additionally
         // Therefore the vector is randomly shuffled and protected
-        vector<Instruction *> instToObfuscatePart = twistGetPartFromVector(instToObfuscate, obfuscationLevel);
+        vector<Instruction *> instToObfuscatePart =
+            twistGetPartFromVector(instToObfuscate, obfuscationLevel);
         instToObfuscate.clear();
 
         insertProtection(&builder, instToObfuscatePart, true);
@@ -175,11 +185,11 @@ namespace {
         const LoopInfo *loops_info = nullptr;
 
         CallGraphWrapperPass *CGPass = getAnalysisIfAvailable<CallGraphWrapperPass>();
-		CallGraph *CG = CGPass ? &CGPass->getCallGraph() : nullptr;
-		if (CG == nullptr) {
-			errs() << ERROR << " No CallGraph can be generated!\n";
-			return;
-		}
+        CallGraph *CG = CGPass ? &CGPass->getCallGraph() : nullptr;
+        if (CG == nullptr) {
+            errs() << ERROR << " No CallGraph can be generated!\n";
+            return;
+        }
 
         while (true) {
             for (auto &F : M) {
@@ -188,18 +198,23 @@ namespace {
                 }
 
                 if (std::find(ENTRYPOINTS.begin(), ENTRYPOINTS.end(), F.getName()) == ENTRYPOINTS.end() &&
-                    getCallGraphForFunction(CG, &F) != 1) { continue; }
+                    getCallGraphForFunction(CG, &F) != 1) {
+                    continue;
+                }
 
                 loops_info = &getAnalysis<LoopInfoWrapperPass>(F).getLoopInfo();
 
                 for (auto &B : F) {
-
                     // Do not insert checks inside loops
-                    if (loops_info != nullptr && loops_info->getLoopFor(&B) != NULL) { continue; }
+                    if (loops_info != nullptr && loops_info->getLoopFor(&B) != NULL) {
+                        continue;
+                    }
 
                     for (auto &I : B) {
-                        // PHINode Instructions and the back of a block or terminators can not be used to split blocks which is done during checker insertion
-                        if (!isa<PHINode>(I) && &I != &(I.getParent()->back()) && !I.isTerminator() && shouldInsertGuard()) {
+                        // PHINode Instructions and the back of a block or terminators can not be
+                        // used to split blocks which is done during checker insertion
+                        if (!isa<PHINode>(I) && &I != &(I.getParent()->back()) &&
+                            !I.isTerminator() && shouldInsertGuard()) {
                             builder->SetInsertPoint(&I);
 
                             GlobalVariable *currentGlobal = globals[checkCounter % numHashVariables];
@@ -214,7 +229,8 @@ namespace {
                                 return;
                             }
 
-                            // Since iterator get invalidated (SplitBlockAndInsertIfThen) skip the rest of this basic block
+                            // Since iterator get invalidated (SplitBlockAndInsertIfThen) skip the
+                            // rest of this basic block
                             break;
                         }
                     }
@@ -223,17 +239,19 @@ namespace {
         }
     }
 
-    void OHProtectorPass::insertCheck(IRBuilder<> *builder, Instruction *inst, GlobalVariable *global, int id) {
+    void OHProtectorPass::insertCheck(IRBuilder<> *builder, Instruction *inst,
+                                      GlobalVariable *global, int id) {
         // Builds a call to printf which prints an ID and
         // the value of the corresponding hash
         LoadInst *loadGlobal = builder->CreateLoad(global);
         Value *idValue = builder->getInt32(id);
         Value *format = builder->CreateGlobalStringPtr("\n%d,%d\n");
-        vector<Value *> args = { format, idValue, loadGlobal };
+        vector<Value *> args = {format, idValue, loadGlobal};
         builder->CreateCall(printfFunction, args);
 
         // Creates and injects assert
-        // SplitBlockAndInsertIfThen invalidates the iterator this has to be considered while inserting the checkers
+        // SplitBlockAndInsertIfThen invalidates the iterator this has to be considered while
+        // inserting the checkers
         Value *cmp = builder->CreateICmpEQ(loadGlobal, idValue);
         TerminatorInst *reportBlock = SplitBlockAndInsertIfThen(cmp, inst, false, nullptr, nullptr);
 
@@ -242,7 +260,8 @@ namespace {
         insertReportFunction(builder);
     }
 
-    void OHProtectorPass::insertProtection(IRBuilder<> *builder, vector<Instruction *> instuctions, bool finalRun) {
+    void OHProtectorPass::insertProtection(IRBuilder<> *builder, vector<Instruction *> instuctions,
+                                           bool finalRun) {
         std::mt19937 twister(rd());
 
         unsigned int globalsIndex = 0;
@@ -284,7 +303,9 @@ namespace {
                     toCast = dyn_cast<ICmpInst>(I);
                     break;
                 }
-                case Instruction::Sub: case Instruction::Add: case Instruction::Xor: {
+                case Instruction::Sub:
+                case Instruction::Add:
+                case Instruction::Xor: {
                     Value *firstOperand = I->getOperand(0);
                     Value *secondOperand = I->getOperand(1);
 
@@ -295,7 +316,7 @@ namespace {
                 default:
                     errs() << ERROR << "Instruction type cannot be protected\n";
                     I->dump();
-                    exit(1); // All defined instructions have to be protected
+                    exit(1);  // All defined instructions have to be protected
             }
 
             // The commented part is a way to make llvm use the saved
@@ -303,10 +324,10 @@ namespace {
             // a new icmp. Unfortunately, this does not always work and
             // sometimes llvm optimizes it anyways so it is unnecessary.
 
-            //Value *alloc = builder->CreateAlloca(int32Ty);
+            // Value *alloc = builder->CreateAlloca(int32Ty);
             Value *casted = builder->CreateIntCast(toCast, int32Ty, false);
-            //builder->CreateStore(casted, alloc);
-            //LoadInst *loadResult = builder->CreateLoad(alloc);
+            // builder->CreateStore(casted, alloc);
+            // LoadInst *loadResult = builder->CreateLoad(alloc);
             BinaryOperator *hash = generateHashFunction(builder, casted, loadGlobal);
             StoreInst *storeGlobal = builder->CreateStore(hash, currentGlobal);
             /*
@@ -346,8 +367,8 @@ namespace {
         }
 
         for (int i = 0; i < numHashVariables; i++) {
-            GlobalVariable *global = new GlobalVariable(M, int32Ty, false, GlobalValue::CommonLinkage,
-                                                        0, globalName);
+            GlobalVariable *global =
+                new GlobalVariable(M, int32Ty, false, GlobalValue::CommonLinkage, 0, globalName);
             global->setAlignment(4);
 
             // Constant Definitions
@@ -366,7 +387,8 @@ namespace {
             builder->CreateCall(putsFunction, corruptedString);
         }
 
-        InlineAsm *corruptStack = InlineAsm::get(FunctionType::get(voidTy, false), "add $$0x10, %rsp", "", false);
+        InlineAsm *corruptStack =
+            InlineAsm::get(FunctionType::get(voidTy, false), "add $$0x10, %rsp", "", false);
         builder->CreateCall(corruptStack);
     }
 
@@ -375,19 +397,25 @@ namespace {
         seen.push_back(func);
 
         // If we have found the entry node --> break
-        if(std::find(ENTRYPOINTS.begin(), ENTRYPOINTS.end(), func) != ENTRYPOINTS.end()) {
+        if (std::find(ENTRYPOINTS.begin(), ENTRYPOINTS.end(), func) != ENTRYPOINTS.end()) {
             int loopCounter = 0;
 
             for (const auto &caller : *CG) {
                 const Function *callFunction = caller.first;
-                if (callFunction == nullptr) { continue; }
+                if (callFunction == nullptr) {
+                    continue;
+                }
 
                 Function *callingFunction = caller.second->getFunction();
-                if (callingFunction == nullptr || callingFunction->getName() != func) { continue; }
+                if (callingFunction == nullptr || callingFunction->getName() != func) {
+                    continue;
+                }
 
-                const LoopInfo *loops_info = &getAnalysis<LoopInfoWrapperPass>(*callingFunction).getLoopInfo();
+                const LoopInfo *loops_info =
+                    &getAnalysis<LoopInfoWrapperPass>(*callingFunction).getLoopInfo();
 
-                for (LoopInfo::iterator begin = loops_info->begin(), end =loops_info->end(); begin != end; ++begin) {
+                for (LoopInfo::iterator begin = loops_info->begin(), end = loops_info->end();
+                     begin != end; ++begin) {
                     loopCounter++;
                 }
             }
@@ -401,26 +429,31 @@ namespace {
 
         for (const auto &caller : *CG) {
             const Function *callingFunction = caller.first;
-            if (callingFunction == nullptr || callingFunction->isDeclaration()) { continue; }
+            if (callingFunction == nullptr || callingFunction->isDeclaration()) {
+                continue;
+            }
 
             int loopCounter = 0;
-            const LoopInfo *loops_info = &getAnalysis<LoopInfoWrapperPass>(*caller.second->getFunction()).getLoopInfo();
+            const LoopInfo *loops_info =
+                &getAnalysis<LoopInfoWrapperPass>(*caller.second->getFunction()).getLoopInfo();
 
             // Is the function called in a loop?
-            for (LoopInfo::iterator begin = loops_info->begin(), end =loops_info->end(); begin != end; ++begin) {
+            for (LoopInfo::iterator begin = loops_info->begin(), end = loops_info->end(); begin != end; ++begin) {
                 loopCounter++;
             }
 
             for (const auto &callee : *(caller.second.get())) {
                 Function *calledFunction = callee.second->getFunction();
 
-                if (calledFunction != nullptr && calledFunction->size() != 0 && calledFunction->getName() == func) {
-                    if (loopCounter >0 ) {
+                if (calledFunction != nullptr && calledFunction->size() != 0 &&
+                    calledFunction->getName() == func) {
+                    if (loopCounter > 0) {
                         result = 2;
                     }
 
                     // Check if we have already seen self to break circles
-                    if(std::find(seen.begin(), seen.end(), callingFunction->getName()) == seen.end()) {
+                    if (std::find(seen.begin(), seen.end(), callingFunction->getName()) ==
+                        seen.end()) {
                         result += getCall(CG, callingFunction->getName(), seen);
                     }
                 }
@@ -432,12 +465,13 @@ namespace {
 
     int OHProtectorPass::getCallGraphForFunction(CallGraph *CG, Function *func) {
         int loopedTimes = getCall(CG, func->getName(), std::vector<std::string>());
-        errs() << func->getName()  << " looped " << loopedTimes << "\n";
+        errs() << func->getName() << " looped " << loopedTimes << "\n";
 
         return loopedTimes;
     }
 
-    BinaryOperator* OHProtectorPass::generateHashFunction(IRBuilder<> *builder, Value *operandOne, Value *operandTwo) {
+    BinaryOperator *OHProtectorPass::generateHashFunction(IRBuilder<> *builder, Value *operandOne,
+                                                          Value *operandTwo) {
         int randNum = rand() % 2;
         // randomly add an Addition or a XOR as hash function
         if (randNum == 0) {
@@ -452,21 +486,19 @@ namespace {
         // creates a variable ID that can be used to find a checker for patching hash variables
         do {
             generatedID = rand() % 100000 + (std::numeric_limits<int>::max() - 100001);
-        } while(std::find(ids.begin(), ids.end(), generatedID) != ids.end()); // unique
+        } while (std::find(ids.begin(), ids.end(), generatedID) != ids.end());  // unique
 
         return generatedID;
     }
 
-    bool OHProtectorPass::shouldInsertGuard() {
-        return rand() % 42 < 1;
-    }
+    bool OHProtectorPass::shouldInsertGuard() { return rand() % 42 < 1; }
 
     bool OHProtectorPass::shouldProtect(Instruction *instruction) {
         unsigned int opCode = instruction->getOpcode();
         return std::find(PROTECTEDINSTRUCTIONS.begin(), PROTECTEDINSTRUCTIONS.end(), opCode) != PROTECTEDINSTRUCTIONS.end();
     }
 
-    template<typename T>
+    template <typename T>
     vector<T *> OHProtectorPass::twistGetPartFromVector(vector<T *> input, double percent) {
         // randomly shuffles a vetor and returns the first percentage of it
         std::mt19937 twister(rd());
@@ -484,17 +516,15 @@ namespace {
     }
 
     void OHProtectorPass::parseConfiguration(string fileName) {
-        Json::Value config = parseJSONFromFile(fileName); // Parse config file
+        Json::Value config = parseJSONFromFile(fileName);  // Parse config file
 
         numHashVariables = config["hashVariables"].asInt();
         checksPerHashVariable = config["checksPerHashVariable"].asInt();
         obfuscationLevel = config["obfuscationLevel"].asDouble();
         debug = config["debug"].asBool();
 
-        if (numHashVariables < 1 || numHashVariables > 99 ||
-            checksPerHashVariable <= 0 ||
+        if (numHashVariables < 1 || numHashVariables > 99 || checksPerHashVariable <= 0 ||
             obfuscationLevel < 0 || obfuscationLevel > 1) {
-
             errs() << ERROR << "Not initialised correctly!\n";
             exit(1);
         }
@@ -514,8 +544,8 @@ namespace {
         bool parsingSuccessful = reader.parse(file, root, false);
 
         if (!parsingSuccessful) {
-            errs()  << WARNING << "Failed to parse file " << fileName << " correctly!\n"
-                    << reader.getFormattedErrorMessages() << "\n";
+            errs() << WARNING << "Failed to parse file " << fileName << " correctly!\n"
+                   << reader.getFormattedErrorMessages() << "\n";
         }
 
         file.close();

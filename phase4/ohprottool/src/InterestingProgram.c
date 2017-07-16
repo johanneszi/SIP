@@ -1,9 +1,9 @@
 #include <stdio.h>
-#include <string.h>
 #include <stdlib.h>
+#include <string.h>
 
 char* isValidLicenseKey(const char* input) {
-    if(strcmp(input, "ValidLicenseKey") == 0) {
+    if (strcmp(input, "ValidLicenseKey") == 0) {
         return "A";
     }
     return "C";
@@ -51,8 +51,8 @@ int min(int a, int b, int c) {
             // a < b && a < c
             return a;
         } else {
-           // a < b && a <= c;
-           return c;
+            // a < b && a <= c;
+            return c;
         }
     } else {
         if (b < c) {
@@ -69,7 +69,7 @@ void InterestingProcedure() {
     printf("\t This is an interesting procedure\n");
 }
 
-void print(char *message) {
+void print(char* message) {
     InterestingProcedure();
     printf("%s\n", message);
 }

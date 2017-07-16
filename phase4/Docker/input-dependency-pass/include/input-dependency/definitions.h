@@ -9,6 +9,7 @@ namespace llvm {
 
 class AAResults;
 class Argument;
+class BitCastInst;
 class BasicBlock;
 class Function;
 class GlobalVariable;
@@ -21,6 +22,7 @@ class LoadInst;
 class InvokeInst;
 class ReturnInst;
 class StoreInst;
+class PHINode;
 
 }
 

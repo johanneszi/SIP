@@ -13,6 +13,7 @@ class BasicBlock;
 namespace input_dependency {
 
 class VirtualCallSiteAnalysisResult;
+class IndirectCallSitesAnalysisResult;
 
 /**
 * \class BasicBlockAnalysisResult
@@ -25,6 +26,7 @@ public:
     BasicBlockAnalysisResult(llvm::Function* F,
                              llvm::AAResults& AAR,
                              const VirtualCallSiteAnalysisResult& virtualCallsInfo,
+                             const IndirectCallSitesAnalysisResult& indirectCallsInfo,
                              const Arguments& inputs,
                              const FunctionAnalysisGetter& Fgetter,
                              llvm::BasicBlock* BB);
@@ -66,6 +68,7 @@ protected:
 public:
     void setInitialValueDependencies(const DependencyAnaliser::ValueDependencies& valueDependencies) override;
     void setOutArguments(const DependencyAnaliser::ArgumentDependenciesMap& outArgs) override;
+    bool isInputDependent(llvm::BasicBlock* block) const override;
     bool isInputDependent(llvm::Instruction* instr) const override;
     bool isInputIndependent(llvm::Instruction* instr) const override;
     bool hasValueDependencyInfo(llvm::Value* val) const override;
@@ -81,10 +84,15 @@ public:
     const GlobalsSet& getReferencedGlobals() const override;
     const GlobalsSet& getModifiedGlobals() const override;
     void markAllInputDependent() override;
+
+    long unsigned get_input_dep_count() const override;
+    long unsigned get_input_indep_count() const override;
+    long unsigned get_input_unknowns_count() const override;
     /// \}
 
 protected:
     llvm::BasicBlock* m_BB;
+    bool m_is_inputDep;
 }; // class BasicBlockAnalysisResult
 
 } // namespace input_dependency

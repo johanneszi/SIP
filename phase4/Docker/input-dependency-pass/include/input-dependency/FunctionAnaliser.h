@@ -13,6 +13,7 @@ class PostDominatorTree;
 
 namespace input_dependency {
 
+class IndirectCallSitesAnalysisResult;
 class VirtualCallSiteAnalysisResult;
 
 class FunctionAnaliser
@@ -23,6 +24,7 @@ public:
                      llvm::LoopInfo& LI,
                      const llvm::PostDominatorTree& PDom,
                      const VirtualCallSiteAnalysisResult& virtualCallsInfo,
+                     const IndirectCallSitesAnalysisResult& indirectCallsInfo,
                      const FunctionAnalysisGetter& getter);
 
 public:
@@ -75,12 +77,15 @@ public:
     bool isInputIndependent(llvm::Instruction* instr) const;
     bool isInputIndependent(const llvm::Instruction* instr) const;
 
+    bool isInputDependentBlock(llvm::BasicBlock* block) const;
+
     bool isOutArgInputIndependent(llvm::Argument* arg) const;
     DepInfo getOutArgDependencies(llvm::Argument* arg) const;
     bool isReturnValueInputIndependent() const;
     const DepInfo& getRetValueDependencies() const;
     bool hasGlobalVariableDepInfo(llvm::GlobalVariable* global) const;
     const DepInfo& getGlobalVariableDependencies(llvm::GlobalVariable* global) const;
+    DepInfo getDependencyInfoFromBlock(llvm::Value* val, llvm::BasicBlock* block) const;
 
     const GlobalsSet& getReferencedGlobals() const;
     const GlobalsSet& getModifiedGlobals() const;
@@ -88,6 +93,10 @@ public:
     llvm::Function* getFunction();
     const llvm::Function* getFunction() const;
 
+    // for debug only
+    long unsigned get_input_dep_count() const;
+    long unsigned get_input_indep_count() const;
+    long unsigned get_input_unknowns_count() const;
     void dump() const;
 
 private:

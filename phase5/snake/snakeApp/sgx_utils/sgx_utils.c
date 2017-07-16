@@ -1,15 +1,15 @@
-#include <string.h>
+#include "sgx_utils.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include "sgx_urts.h"
-#include "sgx_utils.h"
 
 #ifndef TRUE
-# define TRUE 1
+#define TRUE 1
 #endif
 
 #ifndef FALSE
-# define FALSE 0
+#define FALSE 0
 #endif
 
 /* Check error conditions for loading enclave */
@@ -50,20 +50,23 @@ int initialize_enclave(sgx_enclave_id_t* eid, const char* token_path, const char
     ret = sgx_create_enclave(enclave_name, SGX_DEBUG_FLAG, &token, &updated, eid, NULL);
     if (ret != SGX_SUCCESS) {
         print_error_message(ret);
-        if (fp != NULL) fclose(fp);
+        if (fp != NULL)
+            fclose(fp);
         return -1;
     }
 
     /* Step 3: save the launch token if it is updated */
     if (updated == FALSE || fp == NULL) {
         /* if the token is not updated, or file handler is invalid, do not perform saving */
-        if (fp != NULL) fclose(fp);
+        if (fp != NULL)
+            fclose(fp);
         return 0;
     }
 
     /* reopen the file with write capablity */
     fp = freopen(token_path, "wb", fp);
-    if (fp == NULL) return 0;
+    if (fp == NULL)
+        return 0;
     size_t write_num = fwrite(token, 1, sizeof(sgx_launch_token_t), fp);
     if (write_num != sizeof(sgx_launch_token_t))
         printf("Warning: Failed to save launch token to \"%s\".\n", token_path);

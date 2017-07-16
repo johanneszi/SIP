@@ -1,6 +1,6 @@
 #include "Enclave_t.h"
-#include "snake.h"
 #include "sgx_stdio.h"
+#include "snake.h"
 
 int high_score = 0;
 int score = 0;
@@ -10,8 +10,7 @@ int speed = DEFAULT_DELAY;
 int collide_walls(snake_t *snake) {
     snake_segment_t *head = &snake->body[length - 1];
 
-    if ((head->row > MAXROW) || (head->row < 1) ||
-        (head->col > MAXCOL) || (head->col < 1)) {
+    if ((head->row > MAXROW) || (head->row < 1) || (head->col > MAXCOL) || (head->col < 1)) {
         DBG("Wall collision.\n");
         return 1;
     }
@@ -51,16 +50,14 @@ int collide_self(snake_t *snake) {
 }
 
 int collision(snake_t *snake, screen_t *screen) {
-    return collide_walls(snake) ||
-        collide_object(snake, screen, CACTUS) ||
-        collide_self(snake);
+    return collide_walls(snake) || collide_object(snake, screen, CACTUS) || collide_self(snake);
 }
 
 void load_high_score(const char *filename) {
     int fd, unsealed;
     size_t unsealed_size = sizeof(unsealed);
     size_t sealed_size = sizeof(sgx_sealed_data_t) + unsealed_size;
-    uint8_t* sealed_data = NULL;
+    uint8_t *sealed_data = NULL;
 
     // Try to read sealed old high_score
     if ((fd = open(filename, O_RDONLY, S_IRWXU)) == -1) {
@@ -68,7 +65,7 @@ void load_high_score(const char *filename) {
         return;
     }
 
-    sealed_data = (uint8_t*) malloc(sealed_size);
+    sealed_data = (uint8_t *)malloc(sealed_size);
     if (read(fd, sealed_data, sealed_size) != sealed_size) {
         fprintf(stderr, "Could not read secure data!\n");
         free(sealed_data);
@@ -77,8 +74,8 @@ void load_high_score(const char *filename) {
 
     // Try to unseal it (It may fail for example if the old high_score
     // was not sealed by the same enclave)
-    sgx_status_t status = sgx_unseal_data((sgx_sealed_data_t*) sealed_data,
-            NULL, NULL, (uint8_t*) &unsealed, (uint32_t*) &unsealed_size);
+    sgx_status_t status = sgx_unseal_data((sgx_sealed_data_t *)sealed_data, NULL, NULL,
+                                          (uint8_t *)&unsealed, (uint32_t *)&unsealed_size);
 
     free(sealed_data);
     close(fd);
@@ -95,11 +92,11 @@ void load_high_score(const char *filename) {
 void dump_high_score(const char *filename) {
     int fd;
     size_t sealed_size = sizeof(sgx_sealed_data_t) + sizeof(high_score);
-    uint8_t *sealed_data = (uint8_t*) malloc(sealed_size);
+    uint8_t *sealed_data = (uint8_t *)malloc(sealed_size);
 
     // Seal high_score and save it in sealed_data
-    sgx_status_t status = sgx_seal_data(0, NULL, sizeof(high_score), (uint8_t*) &high_score,
-                                        sealed_size, (sgx_sealed_data_t*) sealed_data);
+    sgx_status_t status = sgx_seal_data(0, NULL, sizeof(high_score), (uint8_t *)&high_score,
+                                        sealed_size, (sgx_sealed_data_t *)sealed_data);
 
     if (status != SGX_SUCCESS) {
         fprintf(stderr, "Storing high score not successful!\n");

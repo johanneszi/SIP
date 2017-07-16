@@ -36,21 +36,21 @@
 /* Global EID shared by multiple threads */
 sgx_enclave_id_t global_eid = 0;
 
-int sigsetup(int signo, void(*callback)(int)) {
+int sigsetup(int signo, void (*callback)(int)) {
     struct sigaction action;
 
     sigemptyset(&action.sa_mask);
-    //sigaddset(&action.sa_mask, signo);
+    // sigaddset(&action.sa_mask, signo);
     action.sa_flags = 0;
     action.sa_handler = callback;
     if (SIGALRM == signo) {
-        #ifdef SA_INTERRUPT
+#ifdef SA_INTERRUPT
         action.sa_flags |= SA_INTERRUPT; /* SunOS 4.x */
-        #endif
+#endif
     } else {
-        #ifdef SA_RESTART
+#ifdef SA_RESTART
         action.sa_flags |= SA_RESTART; /* SVR4, 4.4BSD */
-        #endif
+#endif
     }
 
     return sigaction(signo, &action, NULL);
@@ -132,7 +132,7 @@ void draw_line(int col, int row) {
 void setup_level(screen_t *screen, snake_t *snake, int level) {
     int i, row, col;
 
-    srand((unsigned int) time(NULL));
+    srand((unsigned int)time(NULL));
 
     /* Initialize on (re)start */
     if (1 == level) {
@@ -172,8 +172,7 @@ void setup_level(screen_t *screen, snake_t *snake, int level) {
         do {
             row = rand() % MAXROW;
             col = rand() % MAXCOL;
-        }
-        while (screen->grid[row][col] != ' ');
+        } while (screen->grid[row][col] != ' ');
 
         if (i < screen->obstacles) {
             screen->grid[row][col] = CACTUS;
@@ -226,8 +225,8 @@ void setup_level(screen_t *screen, snake_t *snake, int level) {
     show_score(screen);
 
     textcolor(LIGHTRED);
-    //gotoxy (3, 1);
-    //printf ("h:Help");
+    // gotoxy (3, 1);
+    // printf ("h:Help");
     gotoxy(30, 1);
     printf("[ Micro Snake v%s ]", VERSION);
 }
@@ -246,45 +245,45 @@ void move(snake_t *snake, char keys[], char key) {
         snake->dir = DOWN;
     } else if (key == keys[LEFT_TURN]) {
         switch (prev) {
-        case LEFT:
-            snake->dir = DOWN;
-            break;
+            case LEFT:
+                snake->dir = DOWN;
+                break;
 
-        case RIGHT:
-            snake->dir = UP;
-            break;
+            case RIGHT:
+                snake->dir = UP;
+                break;
 
-        case UP:
-            snake->dir = LEFT;
-            break;
+            case UP:
+                snake->dir = LEFT;
+                break;
 
-        case DOWN:
-            snake->dir = RIGHT;
-            break;
+            case DOWN:
+                snake->dir = RIGHT;
+                break;
 
-        default:
-            break;
+            default:
+                break;
         }
     } else if (key == keys[RIGHT_TURN]) {
         switch (prev) {
-        case LEFT:
-            snake->dir = UP;
-            break;
+            case LEFT:
+                snake->dir = UP;
+                break;
 
-        case RIGHT:
-            snake->dir = DOWN;
-            break;
+            case RIGHT:
+                snake->dir = DOWN;
+                break;
 
-        case UP:
-            snake->dir = RIGHT;
-            break;
+            case UP:
+                snake->dir = RIGHT;
+                break;
 
-        case DOWN:
-            snake->dir = LEFT;
-            break;
+            case DOWN:
+                snake->dir = LEFT;
+                break;
 
-        default:
-            break;
+            default:
+                break;
         }
     }
 
@@ -293,29 +292,29 @@ void move(snake_t *snake, char keys[], char key) {
     check_sgx_status(status, "Could not load length");
 
     switch (snake->dir) {
-    case LEFT:
-        snake->body[length].row = snake->body[length - 1].row;
-        snake->body[length].col = snake->body[length - 1].col - 1;
-        break;
+        case LEFT:
+            snake->body[length].row = snake->body[length - 1].row;
+            snake->body[length].col = snake->body[length - 1].col - 1;
+            break;
 
-    case RIGHT:
-        snake->body[length].row = snake->body[length - 1].row;
-        snake->body[length].col = snake->body[length - 1].col + 1;
-        break;
+        case RIGHT:
+            snake->body[length].row = snake->body[length - 1].row;
+            snake->body[length].col = snake->body[length - 1].col + 1;
+            break;
 
-    case UP:
-        snake->body[length].row = snake->body[length - 1].row - 1;
-        snake->body[length].col = snake->body[length - 1].col;
-        break;
+        case UP:
+            snake->body[length].row = snake->body[length - 1].row - 1;
+            snake->body[length].col = snake->body[length - 1].col;
+            break;
 
-    case DOWN:
-        snake->body[length].row = snake->body[length- 1].row + 1;
-        snake->body[length].col = snake->body[length - 1].col;
-        break;
+        case DOWN:
+            snake->body[length].row = snake->body[length - 1].row + 1;
+            snake->body[length].col = snake->body[length - 1].col;
+            break;
 
-    default:
-        /* NOP */
-        break;
+        default:
+            /* NOP */
+            break;
     }
 
     /* Blank last segment of snake */
@@ -335,10 +334,10 @@ void move(snake_t *snake, char keys[], char key) {
         puts(" ");
     }
     textattr(RESETATTR);
-    #ifdef DEBUG
+#ifdef DEBUG
     gotoxy(71, 1);
     printf("(%02d,%02d)", snake->body[length - 1].col, snake->body[length - 1].row);
-    #endif
+#endif
 }
 
 int eat_gold(snake_t *snake, screen_t *screen) {
@@ -419,7 +418,7 @@ int main(void) {
         setup_level(&screen, &snake, 1);
 
         do {
-            keypress = (char) getchar();
+            keypress = (char)getchar();
 
             /* Move the snake one position. */
             move(&snake, keys, keypress);
@@ -436,7 +435,7 @@ int main(void) {
             } else {
                 int gold_eaten;
                 status = collide_gold(global_eid, &gold_eaten, &snake, &screen);
-	        	check_sgx_status(status, "Calling collide_gold failed!");
+                check_sgx_status(status, "Calling collide_gold failed!");
 
                 if (gold_eaten) {
                     /* If no gold left after consuming this one... */
