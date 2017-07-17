@@ -32,6 +32,10 @@
 #define START_COL (MAXCOL / 2 - START_LEN)
 #define START_ROW ((MAXROW + 1) / 2)
 
+#ifndef VERSION
+#define VERSION "0"
+#endif
+
 #define DEFAULT_DELAY 200000
 #define DEFAULT_KEYS  {'o', 'p', 'a', 'z', 'f', 'j', 'q'}
 
