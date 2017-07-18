@@ -11,7 +11,7 @@ dataset = {"micro-snake": {
                 "source": [path + "Docker/dataset/src/micro-snake/snake.c"],
                 "binary": "snake-rewritten",
                 "clangFlags": "-W -Wall -Werror -DVERSION=\"1.0.1\"",
-                "functionsCFI": ["collision", "eat_gold"],
+                "functionsCFI": ["collision", "eat_gold", "setup_level", "move", "collide_self", "collide_object", "show_score", "collide_walls", "main"],
                 "input": path + "Docker/dataset/inputs/micro-snake.in",
                 "execution": "python3 " + path + "Docker/dataset/inputs/ptypipe.py {1} " + path + "build/{0}"
             },
@@ -19,7 +19,7 @@ dataset = {"micro-snake": {
                 "source": [path + "Docker/dataset/src/c-snake/snake.c"],
                 "binary": "csnake-rewritten",
                 "gccFlags": "-lncurses",
-                "functionsCFI": ["snake_game_over", "snake_in_bounds"],
+                "functionsCFI": ["snake_game_over", "snake_in_bounds", "snake_draw_fruit", "snake_index_to_coordinate", "snake_cooridinate_to_index", "snake_move_player", "main"],
                 "input": path + "Docker/dataset/inputs/c-snake.in",
                 "execution": "python3 " + path + "Docker/dataset/inputs/ptypipe.py {1} " + path + "build/{0}"
             },
@@ -27,7 +27,7 @@ dataset = {"micro-snake": {
                 "source": [path + "Docker/dataset/src/tetris/tetris.c"],
                 "binary": "teris-rewritten",
                 "clangFlags": "-DENABLE_SCORE -DENABLE_PREVIEW -DENABLE_HIGH_SCORE",
-                "functionsCFI": ["fits_in", "next_shape"],
+                "functionsCFI": ["fits_in", "next_shape", "place", "freeze", "update", "show_high_score"],
                 "input": path + "Docker/dataset/inputs/tetris.in",
                 "execution": "python3 " + path + "Docker/dataset/inputs/ptypipe.py {1} " + path + "build/{0}"
             },
@@ -47,8 +47,8 @@ dataset = {"micro-snake": {
                     path + "Docker/dataset/src/zopfli/src/zopfli/zopfli_bin.c"],
                 "binary": "zopfli-rewritten",
                 "clangFlags": "-W -Wall -Wextra -ansi -pedantic -O2 -Wno-unused-function",
-                "functionsCFI": ["ZopfliUpdateHash", "AddHuffmanBits"],
-                "functionsRC": ["CeilDiv", "GetLengthScore"],
+                "functionsCFI": ["ZopfliUpdateHash", "AddHuffmanBits", "ZopfliCleanHash", "ZopfliCalculateBlockSizeAutoType", "ZopfliCalculateBlockSize", "UpdateHashValue", "ZopfliWarmupHash"],
+                "functionsRC": ["CeilDev", "GetLengthScore", "GetMatch", "StringsEqual", "CRC", "adler32"],
                 "input": path + "Docker/dataset/inputs/zopfli.in",
                 "execution": path + "build/{0} {1}"
             }
@@ -69,12 +69,12 @@ config = {
 
 def writeConfig():
     with open("config.json", "w") as f:
-        f.write(json.dumps(config))
+        f.write(json.dumps(config, indent=4))
 
 
 def writeResult(program, result):
     with open(program + ".json", "w") as f:
-        f.write(json.dumps(result))
+        f.write(json.dumps(result, indent=4))
 
 
 def executeProgram(program):
@@ -141,26 +141,40 @@ for program in dataset.keys():
         with open("config.json", "w") as f:
             f.write(json.dumps(config))
 
-        ptimer = ProcessTimer([runscript, '-f','config.json'])
 
-        try:
-            ptimer.execute()
-            #poll as often as possible; otherwise the subprocess might
-            # "sneak" in some extra memory usage while you aren't looking
-            while ptimer.poll():
-                time.sleep(.001)
-        finally:
-            #make sure that we don't leave the process dangling?
-            ptimer.close()
+        repetitions = 1
+        protection_time = 0
+        protected_time = 0
+        protected_memory = 0
+        protected_size = 0
+        for i in range(repetitions):
+            ptimer = ProcessTimer([runscript, '-f','config.json'])
 
-        protected_time, protected_memory, protected_size = executeProgram(program)
-        intermediateResult["ProtetionTime"] = ptimer.t1 - ptimer.t0
-        intermediateResult["RuntimeOverhead"] = (protected_time - unprotected_time) # TODO add percent
+            try:
+                ptimer.execute()
+                #poll as often as possible; otherwise the subprocess might
+                # "sneak" in some extra memory usage while you aren't looking
+                while ptimer.poll():
+                    time.sleep(.001)
+            finally:
+                #make sure that we don't leave the process dangling?
+                ptimer.close()
+            int_time, int_memory, int_size = executeProgram(program)
+            protection_time += ptimer.t1 -ptimer.t0
+            protected_time += int_time
+            protected_memory += int_memory
+            protected_size += int_size
 
-        intermediateResult["MemoryOverhead"] = (protected_memory - unprotected_memory) # TODO add percent
-        intermediateResult["BinarySizeOverhead:"] = (protected_size - unprotected_size) # TODO add percent
+
+        intermediateResult["ProtetionTime"] = (protection_time/repetitions)
+
+        intermediateResult["RuntimeOverhead"] = ((protected_time/repetitions) - unprotected_time) # TODO add percent
+
+        intermediateResult["MemoryOverhead"] = ((protected_memory/repetitions) - unprotected_memory) # TODO add percent
+        intermediateResult["BinarySizeOverhead:"] = ((protected_size/repetitions) - unprotected_size) # TODO add percent
 
         result['Results'] += [intermediateResult]
         print(result)
 
         writeResult(program, result)
+
