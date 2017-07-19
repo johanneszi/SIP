@@ -354,25 +354,20 @@ void move (snake_t *snake, char keys[], char key)
 #endif
 }
 
-int collide_walls (snake_t *snake)
+int collide_walls (int row, int col)
 {
-   snake_segment_t *head = &snake->body[snake->len - 1];
-
-   if ((head->row > MAXROW) || (head->row < 1) ||
-       (head->col > MAXCOL) || (head->col < 1))
+   if((row > MAXROW) || (row < 1) ||
+      (col > MAXCOL) || (col < 1))
    {
       DBG("Wall collision.\n");
       return 1;
    }
-
    return 0;
 }
 
-int collide_object (snake_t *snake, screen_t *screen, char object)
+int collide_object (char grid, char object)
 {
-   snake_segment_t *head = &snake->body[snake->len - 1];
-
-   if (screen->grid[head->row - 1][head->col - 1] == object)
+   if (grid == object)
    {
       DBG("Object '%c' collision.\n", object);
       return 1;
@@ -380,6 +375,7 @@ int collide_object (snake_t *snake, screen_t *screen, char object)
 
    return 0;
 }
+
 
 int collide_self (snake_t *snake)
 {
@@ -402,8 +398,13 @@ int collide_self (snake_t *snake)
 
 int collision (snake_t *snake, screen_t *screen)
 {
-   return collide_walls (snake) ||
-      collide_object (snake, screen, CACTUS) ||
+   snake_segment_t *head = &snake->body[snake->len - 1];
+   int row = head->row;
+   int col = head->col;
+   char obj = screen->grid[head->row - 1][head->col - 1];
+
+   return collide_walls (row, col) ||
+      collide_object (obj, CACTUS) ||
       collide_self (snake);
 }
 
@@ -466,16 +467,22 @@ int main (void)
             keypress = keys[QUIT];
             break;
          }
-         else if (collide_object (&snake, &screen, GOLD))
-         {
-            /* If no gold left after consuming this one... */
-            if (!eat_gold (&snake, &screen))
-            {
-               /* ... then go to next level. */
-               setup_level (&screen, &snake, 0);
-            }
+         else
+	 {
+            snake_segment_t *head = &snake.body[snake.len - 1];
 
-            show_score (&screen);
+            char obj = screen.grid[head->row - 1][head->col - 1];
+	    if (collide_object (obj, GOLD))
+            {
+               /* If no gold left after consuming this one... */
+               if (!eat_gold (&snake, &screen))
+               {
+                  /* ... then go to next level. */
+                  setup_level (&screen, &snake, 0);
+               }
+
+               show_score (&screen);
+            }
          }
       }
       while (keypress != keys[QUIT]);
