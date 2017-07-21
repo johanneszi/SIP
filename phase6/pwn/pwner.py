@@ -14,7 +14,7 @@ def nops(start, n):
     for i in range(n):
         r2.cmd('wx 0x90 @ ' + str(start + i))
 
-def nopInst(addr):
+def nop_inst(addr):
     r2.cmd('wao nop @ ' + str(addr))
 
 if __name__ == "__main__":
@@ -25,7 +25,7 @@ if __name__ == "__main__":
     # Search all invalid SC instructions...
     result = r2.cmdj('/xj '+ '48b8050fff310000000049ba')
     if not result:
-        print('No SC protection found!')
+        print('No SC protection found or already patched!')
     else:
         print('Disabling SC protection!')
 
@@ -55,38 +55,51 @@ if __name__ == "__main__":
     nops(address, 9) # nop the remaining bytes
 
     # Disable collision in main
-    nopInst(0x007420a8) # delete instruction call (can be omitted)
-    r2.cmd('wa xor eax, eax @ 0x007420a8') # change return
+    nop_inst(0x007420a8) # delete instruction call
+    r2.cmd('wa xor eax, eax @ 0x007420a8') # change return to always false
+    
+    # Uncomment to invoke eat_gold whenever snake moves
+    # r2.cmd('wa mov eax, 1 @ 0x007423c6')
     
     # Insert only $ in setup_level
-    nopInst(0x00716b1b) # deletes jmp to * inserter
+    nop_inst(0x00716b1b) # deletes jmp to * inserter
     
     if len(argv) > 2:
+        default_speed = 0xaae60
+        new_speed = default_speed
+        try:
+            new_speed = int(argv[2])
+            if new_speed < 0:
+                new_speed = default_speed
+                raise ValueError
+        except ValueError:
+            print("New speed has to be positive! Defaults to 0x{:08x}!".format(new_speed))
+        
         # Change all results for RC for usec_delay
-        nopInst(0x0070e70b)
+        nop_inst(0x0070e70b)
         r2.cmd('wx 0x40b701 @ 0x0070e70b')
 
-        nopInst(0x00723bae)
+        nop_inst(0x00723bae)
         r2.cmd('wx 0x40b701 @ 0x00723bae')
 
-        nopInst(0x0075053f)
+        nop_inst(0x0075053f)
         r2.cmd('wx 0x40b701 @ 0x0075053f')
 
-        nopInst(0x00754b7d)
+        nop_inst(0x00754b7d)
         r2.cmd('wx 0x40b701 @ 0x00754b7d')
 
-        nopInst(0x00769413)
+        nop_inst(0x00769413)
         r2.cmd('wx 0x40b701 @ 0x00769413')
 
         # Nop all ebx involving instructions in usec_delay
-        nopInst(0x007531e3)
-        nopInst(0x007531e6)
-        nopInst(0x007531ed)
-    
-        if argv[2] == '0':
-            r2.cmd('wa mov ebx, 0xaae60 @ 0x007531e6') # make it slow
-        else:
-            r2.cmd('wa mov ebx, 0x100 @ 0x007531e6') # make it fast
+        nop_inst(0x007531e3)
+        nop_inst(0x007531e6)
+        nop_inst(0x007531ed)
+        
+        # Nice values to try:
+        #   0xaae60 - slow and comfortable
+        #   0x100 - fast can't be seen
+        r2.cmd('wa mov ebx, 0x{:08x} @ 0x007531e6'.format(new_speed))
     
     print('Done')
     
