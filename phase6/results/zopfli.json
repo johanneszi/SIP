@@ -1,0 +1,62 @@
+{
+    "Results": [
+        {
+            "RuntimeOverhead": 0.04259981065777119,
+            "Composition": "OH",
+            "BinarySizeOverhead:": 0.0016168632852266995,
+            "MemoryOverhead": 0.02125147579693043,
+            "ProtetionTime": 236.29361414909363
+        },
+        {
+            "RuntimeOverhead": 13.926909639873026,
+            "Composition": "RC",
+            "BinarySizeOverhead:": 0.34720641954608067,
+            "MemoryOverhead": 0.19477434679334915,
+            "ProtetionTime": 406.6240153312683
+        },
+        {
+            "RuntimeOverhead": 6.958347995899867,
+            "Composition": "CFI",
+            "BinarySizeOverhead:": 0.1537217797472903,
+            "MemoryOverhead": 0.31641086186540734,
+            "ProtetionTime": 1.1907308101654053
+        },
+        {
+
+            "RuntimeOverhead": -0.06204093615135764,
+            "Composition": "SC",
+            "BinarySizeOverhead:": 0.3020540152104916,
+            "MemoryOverhead": 0.050767414403777966,
+            "ProtetionTime": 2.2464599609375
+        },
+        {
+            "RuntimeOverhead": 9.087048929105704,
+            "Composition": "OH+CFI",
+            "BinarySizeOverhead:": 0.15539852685789568,
+            "MemoryOverhead": 0.28266033254156775,
+            "ProtetionTime": 179.61102199554443
+        {
+            "RuntimeOverhead": 0.1467503599118083,
+            "Composition": "OH+SC",
+            "BinarySizeOverhead:": 0.3036708784957183,
+            "MemoryOverhead": -0.00708382526564344,
+            "ProtetionTime": 163.06071949005127
+        },
+        {
+            "RuntimeOverhead": 9.766881212535147,
+            "Composition": "RC+CFI+OH",
+            "BinarySizeOverhead:": 0.5074555362596562,
+            "MemoryOverhead": 0.4616292798110979,
+            "ProtetionTime": 1677.7254612445831
+        },
+        {
+            "RuntimeOverhead": 9.476209945861925,
+            "Composition": "RC+CFI+OH+SC",
+            "BinarySizeOverhead:": 12.893406790825798,
+            "MemoryOverhead": 0.5985832349468714,
+            "ProtetionTime": 1482.0382721424103
+        }
+    ],
+    "program": "zopfli"
+}
+

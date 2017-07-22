@@ -1,0 +1,48 @@
+{
+    "Results": [
+        {
+            "RuntimeOverhead": -0.12702438000362015,
+            "Composition": "OH",
+            "BinarySizeOverhead:": 0.008055235903337232,
+            "MemoryOverhead": 0.020394949821948893,
+            "ProtetionTime": 6.1662116050720215
+        },
+        {
+            "RuntimeOverhead": 1.6489879419668423,
+            "Composition": "CFI",
+            "BinarySizeOverhead:": 0.5212888377445339,
+            "MemoryOverhead": 0.0556814503075429,
+            "ProtetionTime": 0.32723093032836914
+        },
+        {
+            "RuntimeOverhead": 0.24552802226192583,
+            "Composition": "SC",
+            "BinarySizeOverhead:": 1.887993862677407,
+            "MemoryOverhead": 0.011006798316607336,
+            "ProtetionTime": 1.589021921157837
+        },
+        {
+            "RuntimeOverhead": 0.11929346508063543,
+            "Composition": "OH+CFI",
+            "BinarySizeOverhead:": 0.7222861526658995,
+            "MemoryOverhead": 0.07316283586921335,
+            "ProtetionTime": 6.480608701705933
+        },
+        {
+            "RuntimeOverhead": 1.5856433712796125,
+            "Composition": "OH+SC",
+            "BinarySizeOverhead:": 1.8922132719601072,
+            "MemoryOverhead": 0.027193266429265117,
+            "ProtetionTime": 10.705130338668823
+        },
+        {
+            "RuntimeOverhead": 0.4963016645799043,
+            "Composition": "CFI+OH+SC",
+            "BinarySizeOverhead:": 2.6716532412734946,
+            "MemoryOverhead": 0.08190352865004846,
+            "ProtetionTime": 10.593405961990356
+        }
+    ],
+    "program": "micro-snake"
+}
+

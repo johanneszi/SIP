@@ -1,0 +1,48 @@
+{
+    "Results": [
+        {
+            "RuntimeOverhead": 4.4466775209528464e-05,
+            "Composition": "OH",
+            "BinarySizeOverhead:": 0.004405286343612369,
+            "MemoryOverhead": 0.5774111675126903,
+            "ProtetionTime": 11.806892156600952
+        },
+        {
+            "RuntimeOverhead": 0.032154361042397994,
+            "Composition": "CFI",
+            "BinarySizeOverhead:": 0.3735682819383259,
+            "MemoryOverhead": 0.03838832487309651,
+            "ProtetionTime": 0.375415563583374
+        },
+	{
+            "RuntimeOverhead": 0.0038299414397511278,
+            "Composition": "SC",
+            "BinarySizeOverhead:": 1.4616740088105726,
+            "MemoryOverhead": 0.5353982300884956,
+            "ProtetionTime": 1.6388390064239502
+        },
+        {
+            "RuntimeOverhead": 0.06488977823123854,
+            "Composition": "OH+CFI",
+            "BinarySizeOverhead:": 0.38267254038179144,
+            "MemoryOverhead": 0.056472081218274184,
+            "ProtetionTime": 4.639657020568848
+        },
+        {
+            "RuntimeOverhead": 0.1303626149230097,
+            "Composition": "OH+SC",
+            "BinarySizeOverhead:": 1.4693098384728343,
+            "MemoryOverhead": 0.0019035532994924331,
+            "ProtetionTime": 18.98738408088684
+        },
+        {
+            "RuntimeOverhead": 0.7855725599143375,
+            "Composition": "CFI+OH+SC",
+            "BinarySizeOverhead:": 1.8822320117474303,
+            "MemoryOverhead": 0.026864728192161902,
+            "ProtetionTime": 18.849068641662598
+        }
+    ],
+    "program": "tetris"
+}
+
