@@ -5,13 +5,14 @@ import os
 
 path = "/home/sip/SIP/phase6/"
 runscript = path + "run.sh"
-composition = ["OH", "RC", "CFI", "SC", "OH+CFI", "OH+SC", "RC+CFI+OH", "RC+CFI+OH+SC"]
+composition_zopfli = ["OH", "RC", "CFI", "SC", "OH+CFI", "OH+SC", "RC+CFI+OH", "RC+CFI+OH+SC"]
+composition = ["OH", "CFI", "SC", "OH+CFI", "OH+SC", "CFI+OH+SC"]
 
 dataset = {"micro-snake": {
                 "source": [path + "Docker/dataset/src/micro-snake/snake.c"],
                 "binary": "snake-rewritten",
                 "clangFlags": "-W -Wall -Werror -DVERSION=\"1.0.1\"",
-                "functionsCFI": ["collision", "eat_gold"],
+                "functionsCFI": ["collision", "eat_gold", "setup_level", "move", "collide_self", "collide_object", "show_score", "collide_walls", "main"],
                 "input": path + "Docker/dataset/inputs/micro-snake.in",
                 "execution": "python3 " + path + "Docker/dataset/inputs/ptypipe.py {1} " + path + "build/{0}"
             },
@@ -19,7 +20,7 @@ dataset = {"micro-snake": {
                 "source": [path + "Docker/dataset/src/c-snake/snake.c"],
                 "binary": "csnake-rewritten",
                 "gccFlags": "-lncurses",
-                "functionsCFI": ["snake_game_over", "snake_in_bounds"],
+                "functionsCFI": ["snake_game_over", "snake_in_bounds", "snake_draw_fruit", "snake_index_to_coordinate", "snake_cooridinate_to_index", "snake_move_player", "main"],
                 "input": path + "Docker/dataset/inputs/c-snake.in",
                 "execution": "python3 " + path + "Docker/dataset/inputs/ptypipe.py {1} " + path + "build/{0}"
             },
@@ -27,7 +28,7 @@ dataset = {"micro-snake": {
                 "source": [path + "Docker/dataset/src/tetris/tetris.c"],
                 "binary": "teris-rewritten",
                 "clangFlags": "-DENABLE_SCORE -DENABLE_PREVIEW -DENABLE_HIGH_SCORE",
-                "functionsCFI": ["fits_in", "next_shape"],
+                "functionsCFI": ["fits_in", "next_shape", "place", "freeze", "update", "show_high_score"],
                 "input": path + "Docker/dataset/inputs/tetris.in",
                 "execution": "python3 " + path + "Docker/dataset/inputs/ptypipe.py {1} " + path + "build/{0}"
             },
@@ -47,8 +48,8 @@ dataset = {"micro-snake": {
                     path + "Docker/dataset/src/zopfli/src/zopfli/zopfli_bin.c"],
                 "binary": "zopfli-rewritten",
                 "clangFlags": "-W -Wall -Wextra -ansi -pedantic -O2 -Wno-unused-function",
-                "functionsCFI": ["ZopfliUpdateHash", "AddHuffmanBits"],
-                "functionsRC": ["CeilDiv", "GetLengthScore"],
+                "functionsCFI": ["ZopfliUpdateHash", "AddHuffmanBits", "ZopfliCleanHash", "UpdateHashValue", "ZopfliWarmupHash"],
+                "functionsRC": ["CeilDiv", "GetLengthScore", "StringsEqual", "CRC", "adler32", "LeafComparator"],
                 "input": path + "Docker/dataset/inputs/zopfli.in",
                 "execution": path + "build/{0} {1}"
             }
@@ -69,12 +70,12 @@ config = {
 
 def writeConfig():
     with open("config.json", "w") as f:
-        f.write(json.dumps(config))
+        f.write(json.dumps(config, indent=4))
 
 
 def writeResult(program, result):
     with open(program + ".json", "w") as f:
-        f.write(json.dumps(result))
+        f.write(json.dumps(result, indent=4))
 
 
 def executeProgram(program):
@@ -93,7 +94,7 @@ def executeProgram(program):
         ptimer.close()
 
     exec_time = ptimer.t1 - ptimer.t0
-    exec_memory = ptimer.max_vms_memory
+    exec_memory = ptimer.max_rss_memory
 
     statinfo = os.stat(path + "build/" + exec_file)
 
@@ -131,8 +132,12 @@ for program in dataset.keys():
         ptimer.close()
 
     unprotected_time, unprotected_memory, unprotected_size = executeProgram(program)
-
-    for mode in composition:
+    comps = []
+    if program == "zopfli":
+        comps = composition_zopfli
+    else:
+        comps = composition
+    for mode in comps:
         print("Protecting in " + mode + " mode " + program)
 
         intermediateResult = {"Composition" : mode}
@@ -155,10 +160,10 @@ for program in dataset.keys():
 
         protected_time, protected_memory, protected_size = executeProgram(program)
         intermediateResult["ProtetionTime"] = ptimer.t1 - ptimer.t0
-        intermediateResult["RuntimeOverhead"] = (protected_time - unprotected_time) # TODO add percent
+        intermediateResult["RuntimeOverhead"] = (protected_time / unprotected_time) - 1 # TODO add percent
 
-        intermediateResult["MemoryOverhead"] = (protected_memory - unprotected_memory) # TODO add percent
-        intermediateResult["BinarySizeOverhead:"] = (protected_size - unprotected_size) # TODO add percent
+        intermediateResult["MemoryOverhead"] = (protected_memory / unprotected_memory) - 1 # TODO add percent
+        intermediateResult["BinarySizeOverhead:"] = (protected_size / unprotected_size) - 1 # TODO add percent
 
         result['Results'] += [intermediateResult]
         print(result)
