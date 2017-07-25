@@ -33,7 +33,7 @@
 #define START_ROW ((MAXROW + 1) / 2)
 
 #ifndef VERSION
-#define VERSION "0"
+#define VERSION "1.0.1"
 #endif
 
 #define DEFAULT_DELAY 200000
